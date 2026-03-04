@@ -12,9 +12,12 @@ require('./config/passport')(passport);
 const app = express();
 const port = process.env.PORT || 8080;
 
+const helmet = require('helmet');
+
 // ======================
 // Middleware 設定
 // ======================
+app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -62,10 +65,12 @@ if (process.env.NODE_ENV === 'production') {
 // ===========================
 // 全域錯誤處理 middleware（未來可擴充）
 // ===========================
-app.use((err, req, res, _next) => {
-  console.error('錯誤處理中：', err.stack);
-  res.status(500).json({ message: '伺服器內部錯誤' });
-});
+const errorHandler = require('./middleware/error.middleware');
+
+// ===========================
+// 全域錯誤處理 middleware
+// ===========================
+app.use(errorHandler);
 
 // 找不到路由時回應 404）
 app.use((req, res) => {
