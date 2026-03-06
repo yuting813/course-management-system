@@ -1,6 +1,6 @@
-import axios from 'axios';
+import axios from './axios.service';
 
-const API_URL = `${import.meta.env.VITE_API_BASE_URL}/api/user`;
+const API_URL = '/user';
 
 class AuthService {
   // 核心認證功能

@@ -331,7 +331,7 @@ const CoursePage = ({ currentUser, setCurrentUser, showAlert }) => {
                     e.currentTarget.style.transform = 'translateY(0)';
                   }}
                 >
-                  <CourseImage course={course} height="180px" />
+                  <CourseImage course={course} width="100%" height="180px" />
                   <div className="card-body d-flex flex-column">
                     <h5 className="card-title fw-bold mt-3">{course.title}</h5>
                     <p className="card-text small text-muted">

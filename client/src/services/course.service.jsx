@@ -1,11 +1,5 @@
-import axios from 'axios';
-const API_URL = `${import.meta.env.VITE_API_BASE_URL}/api/courses`;
-
-// 定義獲取token的函數
-function getToken() {
-  const user = localStorage.getItem('user');
-  return user ? JSON.parse(user).token : '';
-}
+import axios from './axios.service';
+const API_URL = '/courses';
 
 function handleError(error) {
   console.error('發生錯誤:', error);
@@ -13,22 +7,12 @@ function handleError(error) {
 
 class CourseService {
   post(title, description, price, image) {
-    const token = getToken();
-    return axios.post(
-      API_URL,
-      { title, description, price, image },
-      {
-        headers: { Authorization: token },
-      }
-    );
+    return axios.post(API_URL, { title, description, price, image });
   }
 
   async getEnrolledCourses(studentId) {
-    const token = getToken();
     try {
-      const response = await axios.get(`${API_URL}/student/${studentId}`, {
-        headers: { Authorization: token },
-      });
+      const response = await axios.get(`${API_URL}/student/${studentId}`);
       return response.data;
     } catch (error) {
       handleError(error);
@@ -37,14 +21,8 @@ class CourseService {
   }
 
   async getInstructorCourses(instructorId) {
-    const token = getToken();
     try {
-      const response = await axios.get(
-        `${API_URL}/instructor/${instructorId}`,
-        {
-          headers: { Authorization: token },
-        }
-      );
+      const response = await axios.get(`${API_URL}/instructor/${instructorId}`);
       return response.data;
     } catch (error) {
       handleError(error);
@@ -53,48 +31,26 @@ class CourseService {
   }
 
   getCourseByName(keyword) {
-    const token = getToken();
     return axios.get(`${API_URL}`, {
       params: { keyword },
-      headers: { Authorization: token },
     });
   }
 
   getAllCourses() {
-    const token = getToken();
-    return axios.get(API_URL, {
-      headers: { Authorization: token },
-    });
+    return axios.get(API_URL);
   }
 
   enroll(courseId) {
-    const token = getToken();
-    return axios.post(
-      `${API_URL}/enroll/${courseId}`,
-      {},
-      {
-        headers: { Authorization: token },
-      }
-    );
+    return axios.post(`${API_URL}/enroll/${courseId}`);
   }
 
   delete(courseId) {
-    const token = getToken();
-    return axios.delete(`${API_URL}/${courseId}`, {
-      headers: { Authorization: token },
-    });
+    return axios.delete(`${API_URL}/${courseId}`);
   }
 
   async dropCourse(courseId) {
-    const token = getToken();
     try {
-      const response = await axios.post(
-        `${API_URL}/drop/${courseId}`,
-        {},
-        {
-          headers: { Authorization: token },
-        }
-      );
+      const response = await axios.post(`${API_URL}/drop/${courseId}`);
       return response.data;
     } catch (error) {
       if (error.response) {
@@ -112,11 +68,8 @@ class CourseService {
 
   // 更新課程方法
   update(courseId, updatedData) {
-    const token = getToken();
     return axios
-      .patch(`${API_URL}/${courseId}`, updatedData, {
-        headers: { Authorization: token },
-      })
+      .patch(`${API_URL}/${courseId}`, updatedData)
       .then((response) => {
         return response.data;
       })

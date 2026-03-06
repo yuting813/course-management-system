@@ -66,6 +66,17 @@ sequenceDiagram
   - **後端**：實作 **Centralized Error Handling Middleware**，將所有 Operational Errors 統一標準化回傳。
   - **前端**：結合 **Axios Interceptor** 與 **React Error Boundary**，主動攔截 401/403 等驗證錯誤並自動引導流程，防止單一元件崩潰導致整個應用程式白屏 (White Screen of Death)。
 
+### 5. 現代化構建架構 (Modern Build Infrastructure)
+
+- **挑戰**：傳統 Webpack (CRA) 在專案規模擴大後，啟動與熱更新速度顯著變慢，影響開發節奏。
+- **對策**：將前端架構全面遷移至 **Vite 6**，採用原生 ESM 模組系統取代 Bundle-based 開發模式。
+- **成果**：將 Production Build 時間從 ~30s 縮短至 5.02s，優化幅度 >80%。
+
+| Metric         | Create React App | Vite 6  | Improvement |
+| :------------- | :--------------- | :------ | :---------- |
+| **Build Time** | ~30s             | 5.02s   | 6x Faster   |
+| **HMR**        | Laggy (2-3s)     | Instant | Real-time   |
+
 ---
 
 ## 資料模型設計 (Data Model Design)
@@ -89,12 +100,15 @@ sequenceDiagram
 
 ## 技術棧
 
-- **Frontend**: React, React Router, Modular CSS Architecture (Component-based styles)
+- **Frontend**: React (Vite 6), React Router, Modular CSS Architecture (Component-based styles)
 - **Backend**: Node.js, Express
 - **Database**: MongoDB (Mongoose ODM)
 - **Auth**: JWT, Passport.js
 - **Validation**: Joi
-- **Deployment**: Render / Vercel
+- **Deployment**:
+  - Frontend: Vercel (Edge Network for static assets)
+  - Backend: Render (Node.js runtime for API)
+  - Database: MongoDB Atlas (Managed NoSQL Database)
 
 ---
 
@@ -169,7 +183,7 @@ npm run dev
 - **採購合規 → 系統權限設計 (RBAC)**：確保只有對的人能做對的事。
 - **供應商規格檢驗 → 全端資料驗證 (Mirrored Validation)**：確保進入系統的每一筆資料都是乾淨可信的。
 
-這不只是一個課程平台，更是我對**系統穩定性與可預測性**的實踐。
+對我來說，程式碼就如同採購合約，「可預測性 (Predictability)」 與 「風險控制」 是最高原則。這不只是一個課程平台，更是我驗證 「如何寫出好維護、好解釋的程式碼」 的實踐場域。
 
 - **Email**: tinahuu321@gmail.com
 - **LinkedIn**: [Tina Hu](https://www.linkedin.com/in/tina-hu-frontend)
