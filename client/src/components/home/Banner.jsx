@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 
 // carousel banner（非 LCP）
-import carousel1DesktopJpg from '../../assets/carousel-banner-1-desktop.jpg';
+import carousel1DesktopJpg from '../../assets/carousel-banner-1-desktop.png';
 import carousel1DesktopWebp from '../../assets/carousel-banner-1-desktop.webp';
-import carousel1MobileJpg from '../../assets/carousel-banner-1-mobile.jpg';
+import carousel1MobileJpg from '../../assets/carousel-banner-1-mobile.png';
 import carousel1MobileWebp from '../../assets/carousel-banner-1-mobile.webp';
 
 // 依使用者偏好減少動效，自動關閉 autoplay
