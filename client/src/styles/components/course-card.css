@@ -124,17 +124,58 @@
 
 /* 預設為小螢幕設置 */
 
-@media screen and (max-width: 36rem) {
+@media screen and (max-width: 48rem) {
+  .course-card-grid {
+    grid-auto-columns: 85%;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
   .course-card-grid > * {
-    /* scroll-snap-align: center; */
-    grid-auto-columns: 100%;
     scroll-snap-align: center;
-    margin: 3.8 rem;
+  }
+
+  /* 手機版停用 Hover 彈出效果，改為靜態顯示（當詳情組件被渲染時） */
+  .course-details-wrapper {
+    position: static;
+    transform: none;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    width: 100%;
+    padding: 0 !important;
+  }
+
+  .course-details-wrapper.align-left,
+  .course-details-wrapper.align-right {
+    padding: 0 !important;
+  }
+
+  .course-details-card {
+    width: 100%;
+    box-shadow: none;
+    border: none;
+    border-top: 1px solid #dee2e6;
+    border-radius: 0 0 8px 8px;
+    padding: 1rem 0 0 0;
+  }
+
+  /* 隱藏手機版的箭頭 */
+  .course-details-card::before {
+    display: none !important;
+  }
+
+  /* 隱藏手機版的大陰影區容器與負 Margins，避免排版撐開 */
+  .course-card-scroller {
+    padding-top: 0;
+    padding-bottom: 1rem;
+    margin-top: 0;
+    margin-bottom: 0;
   }
 }
 
 /* 中等螢幕：2列 */
-@media screen and (min-width: 37.56rem) {
+@media screen and (min-width: 48.01rem) and (max-width: 61.3rem) {
   .course-card-grid {
     grid-auto-columns: calc((100% - 1.6rem) / 2);
   }
