@@ -4,8 +4,8 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 const ScrollButton = ({ direction, onClick, isVisible }) => (
   <button
     onClick={onClick}
-    className={`btn btn-dark rounded-circle position-absolute top-50 translate-middle-y ${
-      direction === 'left' ? 'start-0' : 'end-0'
+    className={`btn btn-light shadow rounded-circle position-absolute top-50 translate-middle-y scroll-button-hover ${
+      direction === 'left' ? 'start-0 ms-2' : 'end-0 me-2'
     }`}
     style={{
       display: isVisible ? 'flex' : 'none',
