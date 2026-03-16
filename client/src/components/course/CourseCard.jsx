@@ -7,20 +7,33 @@ const CourseCard = forwardRef(
     return (
       <div
         ref={ref}
-        className="me-3 p-2 position-relative card-img-size mb-4 course-card"
+        className="card me-3 p-2 position-relative mb-4 course-card shadow-sm"
+        style={{ borderRadius: '12px' }}
       >
         <div className="course-imager">
           <CourseImage course={course} />
         </div>
-        <div className="card-body">
-          <h6 className="card-title pt-2 fw-bold">{course.title}</h6>
+        <div className="card-body d-flex flex-column p-0 mt-2">
+          <h6 className="card-title fw-bold text-truncate-2 mb-1">
+            {course.title}
+          </h6>
+          <small className="text-muted mb-2 d-block text-truncate">
+            講師：{course.instructor?.username || '未指定'}
+          </small>
 
-          <ul className="list-unstyled text-muted small mt-auto mb-2 pt-2">
-            <li>講師：{course.instructor?.username || '未指定'}</li>
-            <li>4.8 ★★★★★ ({course.students.length})</li>
-            <li>價格：${course.price}</li>
-          </ul>
-          <span className="badge-tag">暢銷課程</span>
+          <div className="d-flex align-items-center mb-3">
+            <span className="badge-tag me-2">暢銷課程</span>
+            <span className="badge text-dark fw-normal me-2 py-1 px-2" style={{ backgroundColor: 'transparent', border: '1px solid #dee2e6' }}>
+              <span className="text-warning">★</span> 4.8
+            </span>
+            <span className="badge text-muted fw-normal py-1 px-2" style={{ backgroundColor: 'transparent', border: '1px solid #dee2e6' }}>
+              {course.students.length.toLocaleString()}則課程評等
+            </span>
+          </div>
+
+          <div className="mt-auto">
+            <span className="fs-5 fw-bold text-dark">${Number(course.price).toLocaleString()}</span>
+          </div>
         </div>
 
         <div

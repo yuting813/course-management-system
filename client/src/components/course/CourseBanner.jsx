@@ -12,27 +12,13 @@ const CourseBanner = ({ showAlert, currentUser }) => {
             <strong>您所有需要的技能皆整合於一處 </strong>
           </h2>
 
-          <p className="fs-6 mb-5">從關鍵技能到技術主題，支援您的專業發展。</p>
+          <p className="fs-6 mb-3">從關鍵技能到技術主題，支援您的專業發展。</p>
         </div>
-        <div className="p-3 " style={{ border: '1px solid #ccc' }}>
-          <h3>
-            <strong>讓 JavaScript 增強您的軟體開發技能</strong>
-          </h3>
-
-          <p>
-            JavaScript
-            是地球上數一數二常見的程式語言，絕大部分是因為它撐起了互動式網頁應用程序。不僅如此，JavaScript
-            也是很適合初學者的程式語言，因為所寫出的程式碼能讓他們看見視覺成果。對初出茅廬的程式設計師來說，這無非是令人振奮且助益良多的事。動態內容是當今網頁開發的熱門話題。動態內容指的是會盡可能因應特定使用者而不斷改變、調整的內容。舉例來說，JavaScript
-            可用於判斷網站訪客是用電腦還是行動裝置，再決定是否提供行動版網頁。正是幕後這一件件小事，讓使用
-            JavaScript 建立動態網頁有了真正的價值。
-          </p>
-
-          <div className="course-position-relative">
-            <CourseCardScroller
-              showAlert={showAlert}
-              currentUser={currentUser}
-            />
-          </div>
+        <div className="course-position-relative">
+          <CourseCardScroller
+            showAlert={showAlert}
+            currentUser={currentUser}
+          />
         </div>
       </div>
     </div>

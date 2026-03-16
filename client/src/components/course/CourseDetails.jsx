@@ -49,35 +49,43 @@ const CourseDetails = ({ course, showAlert, currentUser }) => {
      ========================= */
   if (isMobile) {
     return (
-      <div className="card course-details-card my-2">
+      <div className="course-details-mobile">
         <button
           type="button"
-          className="btn text-start w-100"
+          className="btn btn-link text-decoration-none text-dark w-100 d-flex justify-content-between align-items-center py-2 px-0 border-top"
           onClick={() => setExpanded((prev) => !prev)}
           aria-expanded={expanded}
+          style={{ fontSize: '0.9rem', fontWeight: 'bold' }}
         >
-          <strong>{course.title}</strong>
-          <span className="float-end">{expanded ? '▲' : '▼'}</span>
+          <span>查看細節與教學目標</span>
+          <span style={{ fontSize: '0.7rem' }}>{expanded ? '▲' : '▼'}</span>
         </button>
 
         {expanded && (
-          <div className="card-body pt-2">
-            <h6 className="fw-bold">{course.title}</h6>
-            <p className="text-muted small mb-2">{course.description}</p>
+          <div className="pt-2 pb-3">
+            <p className="small mb-3 lh-sm text-muted">
+              {course.description}
+            </p>
 
-            <ul className="list-unstyled text-muted small mb-3">
-              <li>講師：{course.instructor?.username || '未指定'}</li>
-              <li>4.8 ★★★★★ ({course.students.length})</li>
-              <li>課程價格：${Number(course.price).toLocaleString()}</li>
+            <ul className="list-unstyled small mb-3" style={{ color: '#1c1d1f' }}>
+              <li className="d-flex align-items-start mb-2">
+                <span className="me-2 text-success">✓</span>
+                <span>核心基礎與實務架構解析</span>
+              </li>
+              <li className="d-flex align-items-start mb-2">
+                <span className="me-2 text-success">✓</span>
+                <span>掌握真實專案開發技巧</span>
+              </li>
             </ul>
 
             <button
               type="button"
               onClick={handleEnroll}
-              className="btn btn-sm btn-purple w-100"
+              className="btn btn-purple py-2 fw-bold w-100"
+              style={{ borderRadius: '8px' }}
               disabled={isEnrolled || isEnrolling}
             >
-              {isEnrolled ? '已註冊' : isEnrolling ? '註冊中…' : '註冊課程'}
+              {isEnrolled ? '已經購買' : isEnrolling ? '處理中…' : '新增至購物車'}
             </button>
           </div>
         )}
@@ -100,25 +108,46 @@ const CourseDetails = ({ course, showAlert, currentUser }) => {
     //   }}
     // >
 
-    <div className="course-details-card">
-      <h6 className="fw-bold">{course.title}</h6>
-      <p className="text-muted small mb-2" style={{ minHeight: '3rem' }}>
+    <div className="course-details-card d-flex flex-column h-100">
+      <h5 className="fw-bold mb-2 lh-base">{course.title}</h5>
+      
+      <div className="d-flex align-items-center mb-2">
+        <span className="badge-tag me-2 px-2 py-1">暢銷課程</span>
+        <span className="text-success small fw-bold">更新日期 2026年2月</span>
+      </div>
+
+      <div className="text-muted small mb-3">
+        總計 {7} 小時 · 所有級別 · 字幕
+      </div>
+
+      <p className="small mb-3 lh-sm" style={{ color: '#1c1d1f' }}>
         {course.description}
       </p>
 
-      <ul className="list-unstyled text-muted small mb-3">
-        <li>講師：{course.instructor?.username || '未指定'}</li>
-        <li>4.8 ★★★★★ ({course.students.length})</li>
-        <li>課程價格：${Number(course.price).toLocaleString()}</li>
+      {/* 模擬的課程特點清單 */}
+      <ul className="list-unstyled small mb-4 flex-grow-1" style={{ color: '#1c1d1f' }}>
+        <li className="d-flex align-items-start mb-2">
+          <span className="me-2 mt-1">✓</span>
+          <span>了解 {course.title} 的核心基礎與架構</span>
+        </li>
+        <li className="d-flex align-items-start mb-2">
+          <span className="me-2 mt-1">✓</span>
+          <span>掌握實務技巧，應用於真實專案開發</span>
+        </li>
+        <li className="d-flex align-items-start mb-2">
+          <span className="me-2 mt-1">✓</span>
+          <span>深入淺出解析困難概念，從小白到精通</span>
+        </li>
       </ul>
 
       <button
         type="button"
         onClick={handleEnroll}
-        className="btn btn-sm btn-purple w-100"
+        className="btn btn-purple py-2 fw-bold w-100 mt-auto"
+        style={{ borderRadius: '8px' }}
         disabled={isEnrolled || isEnrolling}
       >
-        {isEnrolled ? '已註冊' : isEnrolling ? '註冊中…' : '註冊課程'}
+        {isEnrolled ? '已經購買' : isEnrolling ? '處理中…' : '新增至購物車'}
       </button>
     </div>
   );
