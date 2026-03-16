@@ -129,6 +129,7 @@
     grid-auto-columns: 85%;
     padding-left: 1rem;
     padding-right: 1rem;
+    align-items: start; /* 防止未展開的卡片被拉長 */
   }
   
   .course-card-grid > * {
