@@ -54,10 +54,20 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
   );
 
   useEffect(() => {
+    const shuffleArray = (array) => {
+      const newArray = [...array];
+      for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+      }
+      return newArray;
+    };
+
     const fetchCourses = async () => {
       try {
         const response = await CourseService.getAllCourses();
-        setCourses(response.data);
+        const shuffledCourses = shuffleArray(response.data);
+        setCourses(shuffledCourses);
         setTimeout(checkScrollState, 0);
       } catch (error) {
         console.error('獲取課程資料失敗:', error);
