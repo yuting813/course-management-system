@@ -199,4 +199,6 @@ With 6 years steeped in Procurement Management, I habitually engineer workflows 
 
 To me, "Maintainability and Predictability" are never mere buzzwords; they are the tangible realities accumulated meticulously through thousands of `if (!user) return false` constraints and resilient `catch` blocks.
 
+- **Website**: [tinahu.dev](https://www.tinahu.dev/)
+- **GitHub**: [yuting813](https://github.com/yuting813)
 - **Email**: [tinahuu321@gmail.com](mailto:tinahuu321@gmail.com)

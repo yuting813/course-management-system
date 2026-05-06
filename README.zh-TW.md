@@ -222,4 +222,6 @@ npm run dev   # 透過 concurrently 同時啟動前後端
 
 對我來說，維護性與可預測性從來不是口號，而是由無數個 `if (!user) return false` 與邊界 `catch block` 耐心推砌而成的真實。
 
-- **Email**：[tinahuu321@gmail.com](mailto:tinahuu321@gmail.com)
+- **Website**: [tinahu.dev](https://www.tinahu.dev/)
+- **GitHub**: [yuting813](https://github.com/yuting813)
+- **Email**: [tinahuu321@gmail.com](mailto:tinahuu321@gmail.com)
