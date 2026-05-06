@@ -1,33 +1,102 @@
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
-# Course Management System - Full-stack Engineering Practice
+# Course Management System - Full-stack Architecture Practice
 
-A curriculum management system built on the MERN Stack (MongoDB, Express, React, Node.js). This project focuses on implementing Permission-driven Architecture and a consistent full-stack validation mechanism to ensure data integrity and UI predictability.
+> This represents more than a standard CRUD portfolio piece; it's a dedicated exploration of "**State Consistency**" and "**Defensive Programming**" within a modern full-stack application. The core focus revolves around centralizing decentralized authentication logic, establishing a robust dual-layered JWT lifecycle defense, and ensuring that no isolated asynchronous failure or UI exception triggers a site-wide crash (White Screen of Death).
 
 - **Live Demo**: [course.tinahu.dev](https://course.tinahu.dev/)
 - **Test Accounts**:
-  - Student: `demo.student@tinahu.dev` / `DemoCourse2026`
-  - Teacher: Invitation code required for registration. Available upon request for interview demos.
+  - Student Identity: `demo.student@tinahu.dev` / `DemoCourse2026`
+  - Instructor Identity: Registration requires an invitation code (can be provided dynamically during interviews).
 
 ---
 
-## Project Motivation
+## Architecture & Engineering Decisions
 
-This project addresses common full-stack challenges:
+### 1. State Management: Achieving SSOT while avoiding Overengineering
 
-- **Permission-driven UI**: Managing distinct workflows and views for different roles (Teachers vs. Students).
-- **Validation Consistency**: Reducing maintenance costs caused by inconsistent validation rules across the stack.
-- **Unified Error Handling**: Establishing a standardized API response and error interception mechanism.
+**The Challenge**: Since the `currentUser` state acts as a dependency across multiple modules—Navigation (rendering identity), Login (writing state), and Interceptors (reading tokens)—any component retaining a stale cache leads to severe sync issues (e.g., UI displays "logged in" while APIs return `401`).
+
+**The Decision**: Without blindly adopting heavy solutions like Redux or Zustand, `App.jsx` was designated as the Single Source of Truth (SSOT). State mutation is tightly controlled, delivering data down the tree via one-way data binding (Props).
+```jsx
+// App.jsx — Centralized state to ensure unidirectional data flow
+const [currentUser, setCurrentUser] = useState(AuthService.getCurrentUser());
+```
+**Trade-off**: Given the current component depth (< 3 layers), this approach perfectly balances development velocity with state accuracy, bypassing tedious store boilerplate. If cross-component logic scales extensively in the future, the architecture retains the flexibility to pivot seamlessly to Zustand.
 
 ---
 
-## Engineering Challenges & Decisions
+### 2. Dual-Layer JWT Defense: Client Pre-check & Server Fallback 
 
-### 1. Permission-driven UI Architecture
+**The Decision**: JWT invalidation manifests in two fundamentally different scenarios. The architecture implements a sophisticated "Frontline Pre-check" combined with a "Backend Fallback":
 
-- **Challenge**: Scattering authorization logic across UI components leads to high maintenance costs, code duplication, and potential security loopholes.
-- **Solution**: Implemented a centralized **Auth & Role State Management** system. UI components are completely decoupled from permission logic, rendering content strictly based on the state provided by the permission service.
-- **Result**: Achieved **flicker-free** role-based navigation and improved architectural scalability, allowing for easy integration of new roles (e.g., Teaching Assistants) without modifying component logic.
+| Defense Layer | Scenario | Implementation Strategy & Benefit |
+|------|------|--------|
+| **Layer 1: Request Pre-check** | Token `exp` Expiration | Parsed & intercepted actively on the client side before dispatch. **Saves redundant network round-trips** and reduces server verification loads. |
+| **Layer 2: Response Fallback** | Token Revoked by Server | Intercepts `401 Unauthorized` responses to execute forced logouts, preventing infinite routing loops. |
+
+```javascript
+// axios.service.js (Layer 1 Defense implementation)
+if (isTokenExpired(token)) {
+  clearToken();
+  window.location.href = '/login';
+  return Promise.reject(new Error('Token expired')); // Abort dispatch immediately
+}
+```
+
+---
+
+### 3. Strategy via Adapter Pattern: Isolating API Instability
+
+**The Challenge**: API `User` response payloads may lack structural consistency (e.g., login returns a nested `{ user: { _id, role } }`, while cache loads yield a flat `{ _id, role }`). Forcing UI components to perform their own defensive checks creates a fragile codebase littered with Optional Chaining (`?.`).
+
+**The Decision**: Extracted logic into `PermissionService` utilizing the **Adapter Pattern**. Before any views consume role logic, payloads are universally funneled through `normalizeUser()`.
+
+```javascript
+// permission.service.jsx
+static normalizeUser(userLike) {
+  if (!userLike) return null;
+  if (userLike.user && typeof userLike.user === 'object') return userLike.user; // Nested
+  if (userLike._id || userLike.id) return userLike;                              // Flat
+  return null;
+}
+```
+**The Benefit**: When backend database schemas or API shapes mutate, maintenance is isolated squarely within this single method, achieving true decoupling of data contracts from UI representation.
+
+---
+
+### 4. Advanced Defensive Design Highlights
+
+** (A) Cross-Tab State Synchronization**
+If a user spans two browser tabs and logs out on Tab A, Tab B's failure to react presents a critical permission vulnerability. Utilizing the native browser `storage` event construct, the system drives global cross-tab zero-cost state mirroring.
+```javascript
+// useAuthUser.jsx
+window.addEventListener('storage', (e) => {
+  if (e.key === 'user') {
+    try { setRaw(e.newValue ? JSON.parse(e.newValue) : null); }
+    catch { setRaw(null); } // Defensive fallback to prevent Hook crashes from JSON corruption
+  }
+});
+```
+
+** (B) Graceful Degradation via Boundaries (ErrorBoundary + Suspense)**
+```jsx
+// App.jsx — Standard routing protection wrapper
+<ErrorBoundary fallback={<ErrorFallback />}>
+  <Suspense fallback={<PageLoader />}>
+    <Page {...props} />
+  </Suspense>
+</ErrorBoundary>
+```
+The SPA splits dynamic chunks at the route level. While `Suspense` handles deterministic loading states, `ErrorBoundary` proactively quarantines asynchronous render exceptions. One module's internal crash will never compromise the global application integrity.
+
+** (C) Differentiated Promise Error Strategies**
+- **Querying** (e.g., Fetching course lists): Exceptions caught at the base layer return an empty array `[]`, defaulting into silent, Graceful Degradation without halting the render cycle.
+- **Mutations** (e.g., Dropping a course): Distinctly classifies server rejections (`error.response`) from timeouts (`error.request`), aggressively triggering Toasts so users are explicitly notified of side-effect failures.
+
+---
+
+## System Architecture Diagram
 
 ```mermaid
 sequenceDiagram
@@ -41,143 +110,93 @@ sequenceDiagram
     Backend->>Database: Validate User
     Database-->>Backend: User Found
     Backend-->>Frontend: Return JWT Token
-    Frontend->>Frontend: Store Token & Init Auth State
+    Frontend->>Frontend: Store Token & Init Auth State (App.jsx SSOT)
 
     rect rgb(240, 248, 255)
-    note right of Frontend: Role-Based Rendering
-    Frontend->>Frontend: Check User Role (Student/Instructor)
-    Frontend-->>User: Render Role-Specific Dashboard
+    note right of Frontend: Role-Based Rendering via PermissionService
+    Frontend->>Frontend: normalizeUser() → getPermissions()
+    Frontend-->>User: Render Role-Specific Dashboard (Instructor / Student)
     end
+
+    note over Frontend: Every subsequent request
+    Frontend->>Frontend: isTokenExpired()? → reject / attach token
+    Frontend->>Backend: API Request with Authorization header
+    Backend-->>Frontend: 200 OK / 401 Unauthorized
+    Frontend->>Frontend: 401? → clearToken() + redirect /login
 ```
 
-### 2. Mirrored Validation Strategy
+---
 
-- **Challenge**: Inconsistent validation rules between frontend and backend (e.g., length limits) lead to poor UX and fragile systems.
-- **Solution**: Established **Mirrored Validation Logic** using **Joi Schemas**. Although environments are physically separated, the schemas are strictly mirrored to ensure that data integrity is maintained from the initial client input interception to the final database write.
-- **Result**: Significantly reduced debugging overhead from API errors (400 Bad Request) and ensured strict data consistency across the entire platform.
+## Tech Stack & Trade-offs
 
-### 3. Secure Authentication with JWT & Passport.js
-
-- **Strategy**: Adopted a stateless authentication architecture using **JWT** combined with **Passport.js** strategies.
-- **Implementation**: Developed custom middleware to enforce **Role-Based Access Control (RBAC)** on protected routes, ensuring critical features (e.g., Course Creation) remain inaccessible to unauthorized users.
-
-### 4. Global Error Handling & Resilience
-
-- **Challenge**: Ad-hoc error handling scattered across controllers and components results in technical debt, difficult debugging, and disjointed user experiences.
-- **Solution**:
-  - **Backend**: Engineered a **Centralized Error Handling Middleware** to intercept unhandled exceptions and enforce a standardized API error response structure.
-  - **Frontend**: Integrated **Error Boundaries** and **Axios Interceptors** to catch render failures or specific HTTP status codes (e.g., 401/403), triggering automated fallback UIs or redirection flows.
-- **Result**: Enhanced system **Fault Tolerance**, ensuring the application degrades gracefully instead of crashing into a "White Screen of Death" during partial failures.
-
-### 5. Modern Build Infrastructure (Vite Migration)
-
-- **Challenge**: Legacy build tools (Webpack/CRA) suffered from slow startup times (~30s) and sluggish feedback loops, hampering developer velocity.
-- **Solution**: Migrated the entire frontend architecture to **Vite 6**, enforcing ESM standards and optimizing dependency handling.
-- **Result**: Reduced production build time to **5.02s** (>80% improvement) and achieved **Instant HMR**, significantly boosting development efficiency.
+| Technology | Reasoning (Engineering Trade-offs) |
+|------|----------------------|
+| **React 18 + Vite 6** | Abandoned bundle-based tooling for native ESM, slashing Production Build times down to 5.02s (>80% optimization). Concurrent Mode inherently pairs beautifully with our Suspense loading architecture. |
+| **React Router v6** | Nested Routes isolate structural layouts from page rendering, enabling `ErrorBoundary` to cover distinct failures globally with exact precision. |
+| **Axios (Custom Instance)** | The Interceptor mechanism serves as the backbone for the "Dual-Layer Token Defense". Falling back to native `fetch` would dilute this clean interception into sprawling, duplicate boilerplate. |
+| **Joi (Mirrored Schema)** | Syncing frontend form pre-checks with backend verification models ensures **absolute, end-to-end data consistency** from UI input directly to DB insertion. |
+| **Passport.js JWT** | Strategy Pattern implementation decouples identity verification from business logic, ensuring frictionless (Open/Closed Principle) scaling if OAuth strategies are integrated later. |
+| **Helmet.js** | Yields comprehensive baseline HTTP security headers (CSP, X-Frame-Options) with trivial configuration overhead. |
+| **MongoDB + Mongoose** | Features Two-Way Referencing between User & Course models. Valuing read velocity over write normalization, this averts full collection scans and optimizes the heavy read-loads inherently found in LMS applications. |
 
 ---
 
-## Data Model Design
+## Getting Started
 
-This project utilizes a **Reference (Normalization)** strategy to handle Many-to-Many (M:N) relationships, balancing data consistency with query performance.
-
-- **User Model**: Contains a `courses` array storing `Course ObjectIds` for enrollment/teaching.
-- **Course Model**: Contains `instructor` (single reference) and `students` (array reference).
-- **Design Decision**: Implemented **Two-way Referencing**. While this requires maintaining consistency on writes, it significantly optimizes read performance for key queries (e.g., "Find all courses for a student" or "Find all students for a course"), which aligns with the read-heavy nature of an LMS.
-
----
-
-## Key Features
-
-- **Role-based Dashboard**: Distinct interfaces and functionalities tailored for Teachers and Students.
-- **Course Lifecycle Management**: Full implementation of creating, editing, publishing, and enrolling in courses.
-- **RESTful API Design**: Semantic API endpoints handling relationships between User and Course entities.
-- **Axios Interceptors**: Encapsulated Axios instances for automatic token injection and standardized error handling.
-
----
-
-## Tech Stack
-
-- **Frontend**: React (Vite 6), React Router, Modular CSS Architecture (Component-based styles)
-- **Backend**: Node.js, Express
-- **Database**: MongoDB (Mongoose ODM)
-- **Auth**: JWT, Passport.js
-- **Validation**: Joi
-- **Deployment**: Render / Vercel
-
----
-
-## Project Structure & Design Principles
-
-This project follows a decoupled frontend-backend architecture with a modular design:
-
-```text
-client/               # React frontend application
-  src/components/     # UI components (Common and Page-specific)
-  src/services/       # Encapsulated API logic (Auth, Course, Permission)
-  src/validation/     # Frontend Joi schemas
-models/               # Mongoose data models (User, Course)
-routes/               # Express routes with permission middleware
-validation/           # Backend Joi logic (Synced with frontend)
-server.js             # Server entry point and middleware configuration
-```
-
-- **Separation of Concerns**: Clear division between business logic (Service), data models (Model), and route control (Controller/Route).
-- **Mirrored Validation Logic**: Validation schemas are strictly mirrored between frontend and backend to ensure consistency.
-- **Decoupling UI & Logic**: Frontend components do not contain complex permission logic; instead, a dedicated Auth Service manages the state unifiedly.
-
----
-
-## Quality Assurance
-
-- **CI/CD Automation**:
-  Integrated Render (Backend) and Vercel (Frontend) to implement CI/CD pipelines, ensuring every code push undergoes build verification for automated delivery.
-
-- **Security Checks**:
-  Implemented stateless JWT validation and backend middleware to enforce strict route protection and role-based access control, preventing unauthorized access.
-
-- **Code Standards**:
-  Enforced strict code styles to ensure semantic naming and structural consistency, improving project maintainability.
-
----
-
-### Getting Started
-
-#### 1. Clone Project
+### 1. Clone Project
 
 ```bash
 git clone https://github.com/yuting813/course-management-system.git
 cd course-management-system
 ```
 
-#### 2. Install Dependencies
+### 2. Install Dependencies
 
 ```bash
-# Install server dependencies
+# Backend dependencies
 npm install
 
-# Install client dependencies
+# Frontend dependencies
 npm run clientinstall
 ```
 
-#### 3. Environment Variables
+### 3. Environment Setup
 
 ```bash
-# Create .env file in root and client folder based on examples
+# Create .env files based on provided examples
 cp .env.example .env
+cd client && cp .env.example .env
 ```
 
-#### 4. Run Development Server
+| Variable | Description |
+|------|------|
+| `MONGODB_CONNECTION` | MongoDB Atlas Connection String |
+| `JWT_SECRET` | Cryptographic key for JWT signatures |
+| `VITE_API_BASE_URL` | Backend API base path for frontend mapping |
+
+### 4. Run Development Server
 
 ```bash
-npm run dev
+npm run dev   # Boots both client and server concurrently
 ```
+
+### Deployment Pipeline
+
+| Layer | Platform | Strategy |
+|------|------|------|
+| Frontend Assets | Vercel | Pushed to Edge Network w/ fully automated CI/CD triggers |
+| Backend API | Render | Hosted in scalable Node.js runtime environments |
+| Database | MongoDB Atlas | Managed cluster with rigid IP Allowlists for foundational security |
 
 ---
 
 ## About Me
 
-This project showcases my ability to design production-ready full-stack architectures with a focus on rigorous permission models and data validation.
+With 6 years steeped in Procurement Management, I habitually engineer workflows tailored for high-risk compliance and rigorous fault tolerance—a mental model I aggressively port into my Frontend Architecture:
 
-- **Email**: tinahuu321@gmail.com
-- **LinkedIn**: [Tina Hu](https://www.linkedin.com/in/tina-hu-frontend)
+- **Procurement Compliance → Mirrored Full-Stack Schemas**: Mandating that polluted data variants are aggressively rejected at the UI entry layer, securing backend boundaries.
+- **Supplier Risk Management → Dual-Layer JWT Defense**: Preemptively intercepting known threat states (Expired Tokens) on the frontline, while guaranteeing a defensive fallback for untracked risks (Server Revokes).
+
+To me, "Maintainability and Predictability" are never mere buzzwords; they are the tangible realities accumulated meticulously through thousands of `if (!user) return false` constraints and resilient `catch` blocks.
+
+- **Email**: [tinahuu321@gmail.com](mailto:tinahuu321@gmail.com)

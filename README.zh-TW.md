@@ -1,33 +1,125 @@
-﻿[English](README.md) | [繁體中文](README.zh-TW.md)
+[English](README.md) | [繁體中文](README.zh-TW.md)
 
-# Course Management System - 全端課程管理系統實踐
+# Course Management System — 全端課程管理系統
 
-這是一個基於 MERN Stack (MongoDB, Express, React, Node.js) 開發的課程管理平台。本專案的核心在於實踐權限驅動的架構設計 (Permission-driven Architecture) 與前後端鏡像驗證機制，確保複雜全端應用中的資料完整性與 UI 行為的一致性。
+> 這不是一個單純的 CRUD 作品集，而是一個專注於「**極端狀態一致性 (State Consistency)**」與「**防禦性程式設計 (Defensive Design)**」的全端架構實踐。專案核心在於：將散落的權限邏輯集中化、建立穩健的 JWT 生命週期雙層防禦、並確保任何單一邏輯或網路異常都不會引發整站崩潰 (White Screen of Death)。
 
-- **Live Demo**: [course.tinahu.dev](https://course.tinahu.dev/)
+- **Live Demo**：[course.tinahu.dev](https://course.tinahu.dev/)
 - **測試帳號**：
   - 學生身分：`demo.student@tinahu.dev` / `DemoCourse2026`
-  - 教師身分：講師註冊需要邀請碼，面試時可提供以便現場測試。
+  - 教師身分：講師註冊需邀請碼，面試時可現場提供。
 
 ---
 
-## 為什麼做這個專案
+## 核心架構與工程挑戰 (Architecture & Engineering Decisions)
 
-本專案旨在解決全端開發中常見的權限管理與資料同步難題：
+### 1. 狀態管理：實踐 SSOT，有意識地避免 Overengineering
 
-- **權限驅動 UI**：確保不同角色（教師與學生）在同一系統下具備完全不同的操作流程與視圖。
-- **資料驗證鏡像化**：解決前後端驗證規則不一導致的維護成本。
-- **全端錯誤處理**：建立一套標準化的 API 回應與錯誤攔截機制。
+**挑戰**：由於 `currentUser` 狀態會同時被導覽列（顯示身份）、登入頁（狀態寫入）、攔截器（讀取 Token）等多處模組消費。一旦任一節點持有過期快取，便會產生「UI 顯示為登入、API 卻回傳 401」的幽靈狀態異常。
+
+**決策**：在不盲目引入 Redux/Zustand 的前提下，將 `App.jsx` 設為全域唯一的狀態中心 (Single Source of Truth)，其餘消費者皆透過 Props 進行單向觀測。`setCurrentUser` 僅在兩個場景下實際呼叫：登入（`LoginPage`）與登出（`Nav`）。
+
+```jsx
+// App.jsx — 狀態集中管理，確保資料單向流動
+const [currentUser, setCurrentUser] = useState(AuthService.getCurrentUser());
+```
+
+**Trade-off**：在當前組件深度 (< 3 層) 且業務相對聚焦的情境下，此方案完美兼顧了開發效率與狀態精準度，省去複雜的 Store boilerplate。若未來出現大量跨非親子元件的頻繁互動，則具備極高的彈性平滑遷移至 Zustand。
 
 ---
 
-## 核心技術挑戰與決策 (Engineering Challenges & Decisions)
+### 2. JWT 雙層防禦機制：客戶端預防與伺服器兜底
 
-### 1. 權限驅動的 UI 系統設計 (Permission-driven UI Architecture)
+**決策**：Token 失效有兩種本質不同的情境，系統對此採用了「前線預檢」與「後方兜底」互相配合的雙層防護機制：
 
-- **挑戰**：在複雜應用中，若權限判斷邏輯分散在元件內，會造成維護困難且容易產生權限漏洞。
-- **對策**：實作集中化的 Auth 與 Role 狀態管理。UI 元件本身不持有權限邏輯，而是根據權限服務回傳的狀態來決定渲染行為。
-- **成果**：實現了「初始化無閃爍」的角色導航，且當新增角色（如助教）時，僅需調整 Service 層，無需大規模修改元件。
+| 防禦層級                  | 對應情境               | 實作策略與工程效益                                                                                                      |
+| ------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **第一層：Request 預檢**  | Token `exp` 時間到期   | 發送前由 Client 端主動解析攔截，**節省無效網路往返**與減輕伺服器不必要的驗證負載。內建 10 秒 Buffer Time 應對時鐘偏差。 |
+| **第二層：Response 兜底** | Token 被伺服器強制撤銷 | 捕捉後端 `401 Unauthorized`，執行自動登出與 Token 清除機制，防止路由發生無限重導。                                      |
+
+```javascript
+// axios.service.js（第一層防禦實作）
+if (isTokenExpired(token)) {
+  clearToken();
+  window.location.href = '/login';
+  return Promise.reject(new Error('Token expired')); // 直接中斷執行，不傳送無效 Request
+}
+```
+
+> **邊界設計**：`isTokenExpired()` 採非對稱安全策略——Token 格式異常（遭篡改）時 `return true` 主動登出（偏安全性）；Token 缺少 `exp` 欄位時 `return false` 視為有效（偏容錯性）。
+
+---
+
+### 3. Service 層的 Adapter Pattern：隔離 API 結構的不穩定性
+
+**挑戰**：API 回傳的 `User` 結構存在不一致的可能（例如登入 API 回傳巢狀 `{ user: { _id, role } }`，而 localStorage 讀取回傳扁平 `{ _id, role }`）。若讓 UI 元件各自處理結構差異，將導致專案內充滿脆弱的 Optional Chaining (`?.`) 與 Null Check。
+
+**決策**：封裝 `PermissionService` 並導入 **Adapter Pattern（轉接器模式）**。所有視圖層消費權限邏輯前，皆經過 `normalizeUser()` 將資料標準化。
+
+```javascript
+// permission.service.jsx
+static normalizeUser(userLike) {
+  if (!userLike) return null;
+  if (userLike.user && typeof userLike.user === 'object') return userLike.user; // 巢狀結構
+  if (userLike._id || userLike.id) return userLike;                              // 扁平結構（同時支援 _id 與 id aliasing）
+  return null;
+}
+```
+
+**效益**：未來若後端 API 資料結構變更，修改範圍僅限於此單一方法，完美實現了將底層資料契約變動與視圖層（View）邏輯隔離。
+
+---
+
+### 4. 進階防禦設計 (Defensive Design) 亮點
+
+**（A）跨頁籤 (Cross-Tab) 狀態雙向同步**
+
+當使用者開啟兩個頁籤，並在 A 頁籤點擊登出時，若 B 頁籤未同步反應，就會發生嚴重的權限安全漏洞。透過原生的 `storage` 事件封裝，實現高效且零成本的全域多頁籤聯動同步：
+
+```javascript
+// useAuthUser.jsx
+window.addEventListener('storage', (e) => {
+  if (e.key === 'user') {
+    try {
+      setRaw(e.newValue ? JSON.parse(e.newValue) : null);
+    } catch {
+      setRaw(null);
+    } // 避免 JSON 損毀導致 Hook 崩潰，防呆保底
+  }
+});
+```
+
+**（B）邊界防護與優雅降級（ErrorBoundary 雙層縱深 + Suspense）**
+
+架構上採雙層縱深設計：最外層有一個全域 `<ErrorBoundary>` 包住整個 `<Routes>` 作為最終兜底；每個 lazy-loaded 路由則被獨立的 `<ErrorBoundary>` 再次包裹，將錯誤影響範圍限縮至單一頁面。
+
+```jsx
+// App.jsx — 雙層縱深防護結構
+<ErrorBoundary>
+  {' '}
+  {/* 全域兜底層（最終防線） */}
+  <Routes>
+    <ErrorBoundary fallback={<ErrorFallback />}>
+      {' '}
+      {/* 路由級獨立保護層 */}
+      <Suspense fallback={<PageLoader />}>
+        {' '}
+        {/* 非同步 chunk 載入狀態 */}
+        <Page {...props} />
+      </Suspense>
+    </ErrorBoundary>
+  </Routes>
+</ErrorBoundary>
+```
+
+**（C）讀寫分離的例外處理策略**
+
+- **查詢操作**（如獲取課程清單）：於底層 catch 例外後回傳空陣列 `[]`，讓 UI 進入靜默降級 (Graceful Degradation)，決不中斷整體渲染。
+- **寫入操作**（如退選／新增課程）：攔截錯誤後，精準區分伺服器拒絕 (`error.response`) 與網路斷線 (`error.request`)，強制呼叫方顯示 Toast，確保具備副作用的行為得到顯性的出錯回饋。
+
+---
+
+## 系統架構圖 (System Architecture)
 
 ```mermaid
 sequenceDiagram
@@ -41,149 +133,93 @@ sequenceDiagram
     Backend->>Database: Validate User
     Database-->>Backend: User Found
     Backend-->>Frontend: Return JWT Token
-    Frontend->>Frontend: Store Token & Init Auth State
+    Frontend->>Frontend: Store Token & Init Auth State (App.jsx SSOT)
 
     rect rgb(240, 248, 255)
-    note right of Frontend: Role-Based Rendering
-    Frontend->>Frontend: Check User Role (Student/Instructor)
-    Frontend-->>User: Render Role-Specific Dashboard
+    note right of Frontend: Role-Based Rendering via PermissionService
+    Frontend->>Frontend: normalizeUser() → getPermissions()
+    Frontend-->>User: Render Role-Specific Dashboard (Instructor / Student)
     end
-```
 
-### 2. 前後端邏輯鏡像化 (Mirrored Validation Strategy)
-
-- **挑戰**：傳統開發常因前後端驗證規則不一致（如：前端限制 10 字，後端限制 20 字），導致 UX 不一致與維護困難。
-- **對策**：建立 **Mirrored Validation Logic**。雖然前後端因環境限制實體檔案分離，但我實作了嚴格對應的 Joi Schemas。確保資料從進入前端表單攔截，到後端寫入資料庫前，都遵循完全一致的格式規範。
-- **成果**：大幅降低了因格式不符產生的 API 錯誤（400 Bad Request），提升了系統的資料強健性 (Data Integrity)。
-
-### 3. JWT 與 Passport.js 的安全性實踐
-
-- **對策**：採用 JWT 進行無狀態驗證，並結合 Passport.js 策略模式管理身份認證。透過自定義中間件保護受限路由，確保教師功能（如開設課程）不會被非授權角色存取。
-
-### 4. 系統韌性與錯誤邊界 (Resilience & Global Error Boundary)
-
-- **對策**：
-  - **後端**：實作 **Centralized Error Handling Middleware**，將所有 Operational Errors 統一標準化回傳。
-  - **前端**：結合 **Axios Interceptor** 與 **React Error Boundary**，主動攔截 401/403 等驗證錯誤並自動引導流程，防止單一元件崩潰導致整個應用程式白屏 (White Screen of Death)。
-
-### 5. 現代化構建架構 (Modern Build Infrastructure)
-
-- **挑戰**：傳統 Webpack (CRA) 在專案規模擴大後，啟動與熱更新速度顯著變慢，影響開發節奏。
-- **對策**：將前端架構全面遷移至 **Vite 6**，採用原生 ESM 模組系統取代 Bundle-based 開發模式。
-- **成果**：將 Production Build 時間從 ~30s 縮短至 5.02s，優化幅度 >80%。
-
-| Metric         | Create React App | Vite 6  | Improvement |
-| :------------- | :--------------- | :------ | :---------- |
-| **Build Time** | ~30s             | 5.02s   | 6x Faster   |
-| **HMR**        | Laggy (2-3s)     | Instant | Real-time   |
-
----
-
-## 資料模型設計 (Data Model Design)
-
-本專案採用 **Reference (Normalization)** 策略來處理多對多 (M:N) 關係，平衡資料一致性與查詢效能。
-
-- **User Model**: 包含 `courses` 陣列，儲存該用戶參選/開課的 `Course ObjectId`。
-- **Course Model**: 包含 `instructor` (單一參照) 與 `students` (陣列參照)。
-- **設計考量**: 透過雙向參照 (Two-way Referencing)，雖然寫入時需維護兩端的一致性，但大幅提升了「查詢某學生所有課程」與「查詢某課程所有學生」的讀取效能，適合讀多寫少的 LMS 場景。
-
----
-
-## 主要功能
-
-- **角色切換系統**：具備教師與學生雙重身分，具備各自專屬的 Dashboard。
-- **課程生命週期管理**：實作課程的建立、編輯、發佈與學生端選課功能。
-- **RESTful API 設計**：設計語義化的 API 端點，處理跨實體（使用者與課程）的關聯操作。
-- **前端攔截器**：封裝 Axios 實例與攔截器，自動處理 Token 夾帶與錯誤狀態分流。
-
----
-
-## 技術棧
-
-- **Frontend**: React (Vite 6), React Router, Modular CSS Architecture (Component-based styles)
-- **Backend**: Node.js, Express
-- **Database**: MongoDB (Mongoose ODM)
-- **Auth**: JWT, Passport.js
-- **Validation**: Joi
-- **Deployment**:
-  - Frontend: Vercel (Edge Network for static assets)
-  - Backend: Render (Node.js runtime for API)
-  - Database: MongoDB Atlas (Managed NoSQL Database)
-
----
-
-## 專案結構與設計原則
-
-本專案採用前後端分離架構，並遵循模組化設計原則：
-
-```text
-client/               # React 前端應用
-  src/components/     # UI 元件 (分為共用元件與頁面專屬元件)
-  src/services/       # 封裝 API 呼叫邏輯 (Auth, Course, Permission)
-  src/validation/     # 前端 Joi 驗證 Schema (鏡像後端邏輯)
-models/               # Mongoose 資料模型定義 (User, Course)
-routes/               # Express 路由控制，結合權限中間件
-validation/           # 後端 Joi 驗證邏輯
-server.js             # 伺服器入口點與中間件配置
+    note over Frontend: Every subsequent request
+    Frontend->>Frontend: isTokenExpired()? → reject / attach token
+    Frontend->>Backend: API Request with Authorization header
+    Backend-->>Frontend: 200 OK / 401 Unauthorized
+    Frontend->>Frontend: 401? → clearToken() + redirect /login
 ```
 
 ---
 
-## 品質保證 (Quality Assurance)
+## 技術選型與 Trade-offs
 
-- **CI/CD 自動化部署**：
-  串接 Render (後端) 與 Vercel (前端) 實作 CI/CD 流程，確保每次代碼推送皆經過構建檢驗，實現自動化交付。
-
-- **安全性控管**：
-  實作 JWT 無狀態驗證機制，並透過後端中間件 (Middleware) 進行嚴格的路由保護與角色權限篩選，防止越權存取。
-
-- **代碼規範**：
-  遵循嚴格的程式碼風格，確保命名語義化與結構一致性，提升專案可維護性。
+| 技術                         | 選型理由（工程考量）                                                                                                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **React 18 + Vite 6**        | 使用原生 ESM 取代 Bundle-based 生態，Production Build 縮至 5.02s（>80% 優化）且達到秒級 HMR 開發體驗；Concurrent Mode 完美支援了 Suspense 的 Lazy Loading 防護架構。               |
+| **React Router v6**          | Nested Routes + Outlet 結構讓 Layout 殼與頁面渲染邏輯清楚分層，讓 ErrorBoundary 得以最精確的粒度覆蓋異常模組。                                                                     |
+| **Axios（自訂 Instance）**   | Interceptor 機制是構建「雙層 Token 防禦」的關鍵基建；若改用原生 `fetch`，將導致核心攔截退化為四處散落的 boilerplate 程式碼。                                                       |
+| **Joi（前後端同步 Schema）** | 前端表單預檢與後端路由防護**共享相同的 Schema 結構設計**，如同採購合規中的「規格書鏡像」——確保資料從輸入端到資料庫寫入具有絕對強一致性，從源頭攔截髒資料，降低後端無謂的防禦開銷。 |
+| **Passport.js JWT**          | 策略模式（Strategy Pattern）讓身份驗證與業務邏輯解耦，若未來需新增 OAuth，具備開閉原則 (OCP) 的無痛擴展性。                                                                        |
+| **Helmet.js**                | 極低成本自動注入 CSP、X-Frame-Options 等安全 HTTP Headers。                                                                                                                        |
+| **MongoDB + Mongoose**       | 設計 User 與 Course 的雙向參照（Two-way Referencing）模型。考量 LMS 系統「讀多寫少」，此策略雖提升寫入維護成本，卻能免除 Full Collection Scan，徹底解放讀取效能。                  |
 
 ---
 
-### Getting Started
+## 開發與部署指南 (Getting Started)
 
-#### 1. 複製專案
+### 1. 複製專案
 
 ```bash
 git clone https://github.com/yuting813/course-management-system.git
 cd course-management-system
 ```
 
-#### 2. 安裝依賴
+### 2. 安裝依賴
 
 ```bash
-# 安裝後端依賴
+# 後端依賴
 npm install
 
-# 安裝前端依賴
+# 前端依賴
 npm run clientinstall
 ```
 
-#### 3. 設定環境變數 (請參考 .env.example)
+### 3. 設定環境變數
 
 ```bash
-# 請在根目錄與 client 目錄下分別建立 .env 檔案
+# 根目錄與 client 目錄下分別建立 .env
 cp .env.example .env
+cd client && cp .env.example .env
 ```
 
-#### 4. 啟動開發伺服器
+| 變數                 | 說明                           |
+| -------------------- | ------------------------------ |
+| `MONGODB_CONNECTION` | MongoDB Atlas 連線字串         |
+| `JWT_SECRET`         | JWT 簽名金鑰（請勿使用預設值） |
+| `VITE_API_BASE_URL`  | 前端對應的後端 API Base URL    |
+
+### 4. 啟動開發伺服器
 
 ```bash
-npm run dev
+npm run dev   # 透過 concurrently 同時啟動前後端
 ```
+
+### 部署架構
+
+| 層次         | 平台          | 說明                                             |
+| ------------ | ------------- | ------------------------------------------------ |
+| 前端靜態資源 | Vercel        | 透過 Edge Network 佈署，自動化 CI/CD pipeline    |
+| 後端 API     | Render        | Node.js Runtime 管理                             |
+| 資料庫       | MongoDB Atlas | Managed Database，啟用 IP Allowlist 加固底層安全 |
 
 ---
 
 ## 關於我 (About Me)
 
-擁有 6 年採購管理經驗，習慣在**高風險與嚴格合規**的環境下工作。我將這種對**流程控制 (Process Control)** 與 **風險管理 (Risk Management)** 的堅持帶入軟體開發：
+身為具備 6 年採購管理背景的工作者，我極度習慣在高合規與高容錯要求的環境下設計流程。我也將相同的思維模型深度融入我的前端工程設計：
 
-- **採購合規 → 系統權限設計 (RBAC)**：確保只有對的人能做對的事。
-- **供應商規格檢驗 → 全端資料驗證 (Mirrored Validation)**：確保進入系統的每一筆資料都是乾淨可信的。
+- **採購合規規格 → 前後端鏡像 Schema**：確保任何可能損毀系統的髒資料，在 UI 輸入端的第一時間就被規格攔截。這與採購流程中「規格書定義於需求端，而非驗收端」的邏輯完全一致。
+- **供應商風險管控 → JWT 雙層防禦機制**：對於可預視的風險（Token Expired）在前線積極阻斷；對於不可預測的風險（Server Revoke）部署堅固的防禦兜底。兩種風險性質不同，處置策略也不同——這正是採購風險矩陣的工程翻譯。
 
-對我來說，程式碼就如同採購合約，「可預測性 (Predictability)」 與 「風險控制」 是最高原則。這不只是一個課程平台，更是我驗證 「如何寫出好維護、好解釋的程式碼」 的實踐場域。
+對我來說，維護性與可預測性從來不是口號，而是由無數個 `if (!user) return false` 與邊界 `catch block` 耐心推砌而成的真實。
 
-- **Email**: tinahuu321@gmail.com
-- **LinkedIn**: [Tina Hu](https://www.linkedin.com/in/tina-hu-frontend)
+- **Email**：[tinahuu321@gmail.com](mailto:tinahuu321@gmail.com)
