@@ -1,5 +1,6 @@
 import axios from './axios.service';
 
+
 const API_URL = '/user';
 
 class AuthService {

@@ -10,7 +10,6 @@ module.exports = (passport) => {
 
   passport.use(
     new JwtStrategy(opts, async function (jwt_payload, done) {
-      console.log(jwt_payload);
       try {
         let foundUser = await User.findOne({ _id: jwt_payload._id })
           .select('-password') // 不回傳密碼欄位
