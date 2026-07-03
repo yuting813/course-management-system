@@ -11,6 +11,32 @@
 
 ---
 
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white&style=flat-square)
+![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white&style=flat-square)
+![Node.js](https://img.shields.io/badge/Node.js-Express-339933?logo=nodedotjs&logoColor=white&style=flat-square)
+![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb&logoColor=white&style=flat-square)
+![JWT](https://img.shields.io/badge/Auth-Passport.js_JWT-000000?logo=jsonwebtokens&logoColor=white&style=flat-square)
+![Joi](https://img.shields.io/badge/Validation-Joi-E44E2A?style=flat-square)
+![Vercel](https://img.shields.io/badge/Frontend-Vercel-000000?logo=vercel&logoColor=white&style=flat-square)
+![Render](https://img.shields.io/badge/Backend-Render-46E3B7?logo=render&logoColor=white&style=flat-square)
+
+![Course Management System — Homepage](docs/screenshot-home.png)
+
+---
+
+## Engineering Differentiators
+
+This project focuses heavily on solving systemic architectural pain points rather than simply "making features work":
+
+| Common Portfolio Approach | This Project's Architecture | Engineering Impact |
+|---|---|---|
+| Separate validation for frontend & backend | **Mirrored Joi Schemas** | Blocks polluted data at the source; slashes maintenance cost |
+| Permission checks scattered across UI | **Adapter Pattern in Service Layer** | Shields the View layer from API data structure mutations |
+| Over-reliance on heavy state management | **App.jsx SSOT (One-way Data Flow)** | Eliminates boilerplate overhead for shallow component depths |
+| Allowing stale tokens to dispatch requests | **Dual-Layer JWT Defense (Pre-check & Fallback)** | Saves invalid network round-trips & prevents infinite routing loops |
+
+---
+
 ## Architecture & Engineering Decisions
 
 ### 1. State Management: Achieving SSOT while avoiding Overengineering
@@ -101,8 +127,8 @@ The SPA splits dynamic chunks at the route level. While `Suspense` handles deter
 ```mermaid
 sequenceDiagram
     participant User
-    participant Frontend (UI/AuthService)
-    participant Backend (Passport/JWT)
+    participant Frontend as Frontend (UI/AuthService)
+    participant Backend as Backend (Passport/JWT)
     participant Database
 
     User->>Frontend: Login Credentials
@@ -190,6 +216,32 @@ npm run dev   # Boots both client and server concurrently
 
 ---
 
+## 🛠️ Technical Debt & Engineering Roadmap
+
+While the current architecture prioritizes development velocity and core stability, I have identified several strategic optimization points for enterprise-grade scaling:
+
+1. **Controller Pattern Refactoring**: 
+   - *Current*: Logic is coupled within route handlers (Fat Routes).
+   - *Roadmap*: Decouple business logic into a dedicated `controllers/` layer to enhance unit testability and follow the Single Responsibility Principle (SRP).
+
+2. **Authorization Standard Alignment**:
+   - *Current*: Custom `JWT` scheme for explicit educational clarity.
+   - *Roadmap*: Transition to the industry-standard `Bearer` scheme (RFC 6750) to ensure seamless compatibility with third-party API gateways and security tools.
+
+3. **Centralized Error Orchestration**:
+   - *Current*: Manual `try-catch` blocks with custom helper throws.
+   - *Roadmap*: Implement a global error-handling middleware with a hierarchy of `AppError` classes, ensuring consistent JSON error responses across all micro-segments of the API.
+
+4. **Professional Observability**:
+   - *Current*: Basic `console.log` for development debugging.
+   - *Roadmap*: Integrate a structured logging library (e.g., Winston or Pino) to categorize logs by severity levels and enable persistent log rotation for production auditing.
+
+5. **Distributed Caching Layer**:
+   - *Current*: Direct Database queries for every authentication check.
+   - *Roadmap*: Introduce Redis for session/user metadata caching to reduce DB I/O latency and improve response times for high-concurrency scenarios.
+
+---
+
 ## About Me
 
 With 6 years steeped in Procurement Management, I habitually engineer workflows tailored for high-risk compliance and rigorous fault tolerance—a mental model I aggressively port into my Frontend Architecture:
@@ -197,8 +249,13 @@ With 6 years steeped in Procurement Management, I habitually engineer workflows 
 - **Procurement Compliance → Mirrored Full-Stack Schemas**: Mandating that polluted data variants are aggressively rejected at the UI entry layer, securing backend boundaries.
 - **Supplier Risk Management → Dual-Layer JWT Defense**: Preemptively intercepting known threat states (Expired Tokens) on the frontline, while guaranteeing a defensive fallback for untracked risks (Server Revokes).
 
-To me, "Maintainability and Predictability" are never mere buzzwords; they are the tangible realities accumulated meticulously through thousands of `if (!user) return false` constraints and resilient `catch` blocks.
+To me, maintainability and predictability are never mere buzzwords; they are meticulously built through countless `if (!user) return false` guards and resilient `catch` blocks.
 
 - **Website**: [tinahu.dev](https://www.tinahu.dev/)
 - **GitHub**: [yuting813](https://github.com/yuting813)
 - **Email**: [tinahuu321@gmail.com](mailto:tinahuu321@gmail.com)
+
+---
+
+> **Educational Use Disclaimer**  
+> This project is developed solely for personal technical demonstration and educational purposes. All third-party trademarks, service names, and logos referenced in this project belong to their respective owners. No commercial use or affiliation is implied.
