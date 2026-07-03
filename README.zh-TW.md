@@ -2,12 +2,38 @@
 
 # Course Management System — 全端課程管理系統
 
-> 這不是一個單純的 CRUD 作品集，而是一個專注於「**極端狀態一致性 (State Consistency)**」與「**防禦性程式設計 (Defensive Design)**」的全端架構實踐。專案核心在於：將散落的權限邏輯集中化、建立穩健的 JWT 生命週期雙層防禦、並確保任何單一邏輯或網路異常都不會引發整站崩潰 (White Screen of Death)。
+> 本專案是一個全端架構實踐，核心聚焦於「**狀態一致性 (State Consistency)**」與「**防禦性程式設計 (Defensive Design)**」兩大工程命題。架構設計主要圍繞三大技術挑戰：集中化全域權限邏輯、建立 JWT 生命週期的雙層防禦機制，以及實作系統性邊界防護策略。透過精準限縮錯誤的影響範圍 (Impact Scope)，確保系統在面臨局部模組失效或網路異常等邊緣情境時，仍能**優雅降級 (Graceful Degradation)**，最大程度避免整站崩潰 (White Screen of Death)。
 
 - **Live Demo**：[course.tinahu.dev](https://course.tinahu.dev/)
 - **測試帳號**：
   - 學生身分：`demo.student@tinahu.dev` / `DemoCourse2026`
   - 教師身分：講師註冊需邀請碼，面試時可現場提供。
+
+---
+
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white&style=flat-square)
+![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white&style=flat-square)
+![Node.js](https://img.shields.io/badge/Node.js-Express-339933?logo=nodedotjs&logoColor=white&style=flat-square)
+![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb&logoColor=white&style=flat-square)
+![JWT](https://img.shields.io/badge/驗證-Passport.js_JWT-000000?logo=jsonwebtokens&logoColor=white&style=flat-square)
+![Joi](https://img.shields.io/badge/資料驗證-Joi-E44E2A?style=flat-square)
+![Vercel](https://img.shields.io/badge/前端部署-Vercel-000000?logo=vercel&logoColor=white&style=flat-square)
+![Render](https://img.shields.io/badge/後端部署-Render-46E3B7?logo=render&logoColor=white&style=flat-square)
+
+![Course Management System — 首頁](docs/screenshot-home.png)
+
+---
+
+## 與一般作品集的工程差異 (Engineering Differentiators)
+
+我不只是「做出功能」，更著重「如何解決全端開發中的系統性問題」:
+
+| 一般作品集常見做法         | 本專案的架構實踐                | 帶來的工程價值 (Impact)                        |
+| -------------------------- | ------------------------------- | ---------------------------------------------- |
+| 前後端各寫一套驗證邏輯     | **Joi Schema 鏡像化設計**       | 從 UI 源頭阻斷髒資料，維護成本大幅降低         |
+| 權限判斷散落於各 UI 元件   | **Service 層 Adapter Pattern**  | 抽離 API 結構的不穩定性，視圖層 (View) 零影響  |
+| 盲目依賴重型狀態庫 (Redux) | **App.jsx SSOT 單向資料流**     | 針對極淺的元件深度，精準省去無謂的 Boilerplate |
+| 放任過期的 Token 送出請求  | **JWT 預檢與 401 兜底雙層防護** | 節省無效網路往返，避免前端陷入重導向死迴圈     |
 
 ---
 
@@ -119,13 +145,23 @@ window.addEventListener('storage', (e) => {
 
 ---
 
+### 5. 前端效能調校與體驗優化 (Web Performance & UX)
+
+在追求系統強健性的同時，本專案也以**「資源 ROI 最佳化」**的思維進行了深度的前端效能調校，對齊現代瀏覽器的 Core Web Vitals 指標：
+
+- **關鍵渲染路徑優化 (Critical Render Path)**：拒絕盲目的全域 Lazy Load。將首頁 (`HomePage`) 維持同步載入以確保最快的 **LCP (最大內容繪製)**；而將二級路由利用 `React.lazy` 進行 Code Splitting，大幅降低首屏的 Initial JS Bundle Size。
+- **折疊線下延遲載入 (Below-the-fold Optimization)**：將位於畫面最底端的 `<Footer />` 與非首屏內容進行組件級的 Lazy Load，進一步提升 **TTI (可互動時間)**。
+- **網路防禦與漸進式過渡 (Resilient Suspense)**：每一個動態載入的 Chunk 皆配有專屬的 `<Suspense>` 骨架過渡動畫，並被局部 `<ErrorBoundary>` 包裹。即使生產環境因重新部署觸發 `ChunkLoadError`，也能將白屏災難隔離在單一視圖內，達成效能與容錯的完美平衡。
+
+---
+
 ## 系統架構圖 (System Architecture)
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Frontend (UI/AuthService)
-    participant Backend (Passport/JWT)
+    participant Frontend as Frontend (UI/AuthService)
+    participant Backend as Backend (Passport/JWT)
     participant Database
 
     User->>Frontend: Login Credentials
@@ -213,15 +249,47 @@ npm run dev   # 透過 concurrently 同時啟動前後端
 
 ---
 
+## 🛠️ 技術債與架構優化路線圖 (Roadmap)
+
+目前的架構設計優先考量開發速度與核心穩定性。針對未來企業級的規模化需求，我已規劃以下優化方向：
+
+1. **控制器模式重構 (Controller Pattern)**：
+   - _現狀_：業務邏輯與路由耦合 (Fat Routes)。
+   - _目標_：將邏輯抽離至 `controllers/` 層，提升程式碼的可測試性並符合單一職責原則 (SRP)。
+
+2. **身份驗證規範對齊**：
+   - _現狀_：使用自訂 `JWT` Scheme 以利教學理解。
+   - _目標_：遷移至工業標準 `Bearer` Scheme (RFC 6750)，確保與第三方 API 網關與安全工具的無縫整合。
+
+3. **集中式錯誤管理**：
+   - _現狀_：各路由手動使用 `try-catch` 搭配輔助函式。
+   - _目標_：實作全域錯誤處理中間件 (Global Error Middleware)，透過自訂 `AppError` 類別統一全站的錯誤回應結構。
+
+4. **專業日誌系統 (Observability)**：
+   - _現狀_：使用基礎的 `console.log` 進行調試。
+   - _目標_：整合 Winston 或 Pino 等結構化日誌庫，實現分級日誌 (Levels) 與日誌輪轉 (Rotation)，以利生產環境的稽核與追蹤。
+
+5. **分散式快取機制**：
+   - _現狀_：每次身份驗證均直接查詢資料庫。
+   - _目標_：導入 Redis 作為快取層，儲存常用使用者資料，大幅降低資料庫 I/O 壓力並提升系統響應速度。
+
+---
+
 ## 關於我 (About Me)
 
-身為具備 6 年採購管理背景的工作者，我極度習慣在高合規與高容錯要求的環境下設計流程。我也將相同的思維模型深度融入我的前端工程設計：
+身為具備 6 年採購管理背景的工作者，我已深植了「高合規」與「嚴格風險控管」的思維模式。我也將這樣的標準，深度融入我的前端工程設計：
 
 - **採購合規規格 → 前後端鏡像 Schema**：確保任何可能損毀系統的髒資料，在 UI 輸入端的第一時間就被規格攔截。這與採購流程中「規格書定義於需求端，而非驗收端」的邏輯完全一致。
-- **供應商風險管控 → JWT 雙層防禦機制**：對於可預視的風險（Token Expired）在前線積極阻斷；對於不可預測的風險（Server Revoke）部署堅固的防禦兜底。兩種風險性質不同，處置策略也不同——這正是採購風險矩陣的工程翻譯。
+- **供應商風險管控 → JWT 雙層防禦機制**：對於可預視的風險在前線積極阻斷（預檢）；對於不可預測的風險部署防禦兜底。這正是採購風險矩陣的工程翻譯。
+- **資源成本控管 → 前端效能優化 (Web Performance)**：如同採購控管預算與物流，我精準控管前端的網路請求與 Bundle Size，優先保障關鍵渲染路徑 (CRP)，確保每一 Byte 的載入都能帶來最高的 UX 投資報酬率 (ROI)。
 
-對我來說，維護性與可預測性從來不是口號，而是由無數個 `if (!user) return false` 與邊界 `catch block` 耐心推砌而成的真實。
+對我來說，維護性與可預測性從來不是口號，而是由無數個 `if (!user) return false` 與邊界 `catch block` 耐心推砌而成。
 
 - **Website**: [tinahu.dev](https://www.tinahu.dev/)
 - **GitHub**: [yuting813](https://github.com/yuting813)
 - **Email**: [tinahuu321@gmail.com](mailto:tinahuu321@gmail.com)
+
+---
+
+> **教育用途免責聲明 (Educational Use Disclaimer)**  
+> 本專案僅供個人技術展示與學習用途。所有第三方商標、服務名稱及標誌均歸其各自所有者所有。本專案不涉及任何商業行為，亦不與任何第三方服務存在商業附屬關係。
