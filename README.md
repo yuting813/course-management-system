@@ -1,13 +1,13 @@
 [English](README.md) | [繁體中文](README.zh-TW.md)
 
-# Course Management System - Full-stack Architecture Practice
+# MERN Course Management System — A Full-Stack Defensive Architecture
 
-> This represents more than a standard CRUD portfolio piece; it's a dedicated exploration of "**State Consistency**" and "**Defensive Programming**" within a modern full-stack application. The core focus revolves around centralizing decentralized authentication logic, establishing a robust dual-layered JWT lifecycle defense, and ensuring that no isolated asynchronous failure or UI exception triggers a site-wide crash (White Screen of Death).
+This project focuses on one of the hardest problems to spot in full-stack SPA development: **once authentication crosses multiple asynchronous boundaries, state consistency quietly starts to break down**. By centralizing scattered auth logic into a single source of truth, building a two-layer defense around the JWT lifecycle, and implementing systematic error isolation, the system stays predictable even when individual modules fail.
 
 - **Live Demo**: [course.tinahu.dev](https://course.tinahu.dev/)
 - **Test Accounts**:
-  - Student Identity: `demo.student@tinahu.dev` / `DemoCourse2026`
-  - Instructor Identity: Registration requires an invitation code (can be provided dynamically during interviews).
+  - Student: `demo.student@tinahu.dev` / `DemoCourse2026`
+  - Instructor: instructor registration requires an invite code, available on request during an interview.
 
 ---
 
@@ -20,163 +20,206 @@
 ![Vercel](https://img.shields.io/badge/Frontend-Vercel-000000?logo=vercel&logoColor=white&style=flat-square)
 ![Render](https://img.shields.io/badge/Backend-Render-46E3B7?logo=render&logoColor=white&style=flat-square)
 
-![Course Management System — Homepage](docs/screenshot-home.png)
+![Course Management System — Homepage Screenshot](docs/screenshot-home.png)
 
 ---
 
 ## Engineering Differentiators
 
-This project focuses heavily on solving systemic architectural pain points rather than simply "making features work":
+This project isn't about "getting features to work" — it's aimed at the structural problems that quietly accumulate in most portfolio projects:
 
-| Common Portfolio Approach | This Project's Architecture | Engineering Impact |
-|---|---|---|
-| Separate validation for frontend & backend | **Mirrored Joi Schemas** | Blocks polluted data at the source; slashes maintenance cost |
-| Permission checks scattered across UI | **Adapter Pattern in Service Layer** | Shields the View layer from API data structure mutations |
-| Over-reliance on heavy state management | **App.jsx SSOT (One-way Data Flow)** | Eliminates boilerplate overhead for shallow component depths |
-| Allowing stale tokens to dispatch requests | **Dual-Layer JWT Defense (Pre-check & Fallback)** | Saves invalid network round-trips & prevents infinite routing loops |
+| Common portfolio approach                                     | This project's decision                          | Engineering rationale                                                                               |
+| ------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Frontend and backend each maintain their own validation logic | **Mirrored Joi schemas**                         | Blocks dirty data at the UI boundary; a single schema change propagates symmetrically to both sides |
+| Permission checks scattered across UI components              | **Service-layer Adapter Pattern**                | The view layer is fully isolated from changes in the API data shape                                 |
+| Reaching for Redux/Zustand by default                         | **`App.jsx` SSOT + unidirectional Props**        | At ≤3 levels of component depth, Props skip store boilerplate without sacrificing state accuracy    |
+| Letting a possibly-expired token go out with a request        | **Two-layer JWT defense (pre-check + backstop)** | Saves wasted round trips; prevents the frontend from falling into an infinite 401 redirect loop     |
 
 ---
 
 ## Architecture & Engineering Decisions
 
-### 1. State Management: Achieving SSOT while avoiding Overengineering
+### 1. State Management: Practicing SSOT While Consciously Avoiding Overengineering
 
-**The Challenge**: Since the `currentUser` state acts as a dependency across multiple modules—Navigation (rendering identity), Login (writing state), and Interceptors (reading tokens)—any component retaining a stale cache leads to severe sync issues (e.g., UI displays "logged in" while APIs return `401`).
+**Root problem**: `currentUser` is consumed by three modules at once — the nav bar (displays identity), the login page (writes state), and the Axios interceptor (reads the token). If any one consumer holds a stale cache, the system enters a ghost state: the UI shows "logged in" while the API returns `401`.
 
-**The Decision**: Without blindly adopting heavy solutions like Redux or Zustand, `App.jsx` was designated as the Single Source of Truth (SSOT). State mutation is tightly controlled, delivering data down the tree via one-way data binding (Props).
+**Decision**: Without reaching for Redux/Zustand by default, `App.jsx` is made the single global source of truth. `setCurrentUser` is only ever called in two places across the entire project: `LoginPage` (writes on login) and `Nav` (clears on logout). Every consumer receives state through props — there are no implicit subscriptions.
+
 ```jsx
-// App.jsx — Centralized state to ensure unidirectional data flow
+// App.jsx — centralized state, enforcing unidirectional data flow via Props
 const [currentUser, setCurrentUser] = useState(AuthService.getCurrentUser());
 ```
-**Trade-off**: Given the current component depth (< 3 layers), this approach perfectly balances development velocity with state accuracy, bypassing tedious store boilerplate. If cross-component logic scales extensively in the future, the architecture retains the flexibility to pivot seamlessly to Zustand.
+
+**Trade-off assessment**: At the current component depth (<3 levels) and with a focused feature set, this approach balances development speed and state accuracy well, without the overhead of store boilerplate. If the project later grows to include frequent interactions between non-parent-child components at scale, the architecture already leaves room for a smooth migration to Zustand — the state just needs to be extracted, with no need to rework existing logic.
 
 ---
 
-### 2. Dual-Layer JWT Defense: Client Pre-check & Server Fallback 
+### 2. Two-Layer JWT Defense: Client-Side Pre-Check and Server-Side Backstop
 
-**The Decision**: JWT invalidation manifests in two fundamentally different scenarios. The architecture implements a sophisticated "Frontline Pre-check" combined with a "Backend Fallback":
+Token expiry has two fundamentally different failure modes. Handling both with the same strategy either wastes network round trips or leads to an uncontrollable redirect loop. This architecture handles each at the layer where it belongs:
 
-| Defense Layer | Scenario | Implementation Strategy & Benefit |
-|------|------|--------|
-| **Layer 1: Request Pre-check** | Token `exp` Expiration | Parsed & intercepted actively on the client side before dispatch. **Saves redundant network round-trips** and reduces server verification loads. |
-| **Layer 2: Response Fallback** | Token Revoked by Server | Intercepts `401 Unauthorized` responses to execute forced logouts, preventing infinite routing loops. |
+| Defense layer                  | Scenario                               | Strategy and engineering payoff                                                                                                                                                                       |
+| ------------------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Layer 1: Request pre-check** | Token `exp` has passed                 | Parsed and intercepted client-side before the request is sent, saving a wasted round trip and server-side validation load. `isTokenExpired()` builds in a 10-second buffer to account for clock skew. |
+| **Layer 2: Response backstop** | Token was forcibly revoked server-side | Catches the backend's `401 Unauthorized`, triggers auto-logout and token clearing, preventing an infinite redirect loop.                                                                              |
 
 ```javascript
-// axios.service.js (Layer 1 Defense implementation)
+// axios.service.js — Layer 1: intercept before the request leaves the client
 if (isTokenExpired(token)) {
   clearToken();
   window.location.href = '/login';
-  return Promise.reject(new Error('Token expired')); // Abort dispatch immediately
+  return Promise.reject(new Error('Token expired')); // stop here, no invalid request sent
 }
 ```
 
+**Boundary design**: `isTokenExpired()` uses an asymmetric safety strategy — a malformed token (tampering) returns `true` and triggers logout (favoring security); a token missing the `exp` field returns `false` and is treated as valid (favoring fault tolerance).
+
 ---
 
-### 3. Strategy via Adapter Pattern: Isolating API Instability
+### 3. Service-Layer Adapter Pattern: Isolating API Structural Instability
 
-**The Challenge**: API `User` response payloads may lack structural consistency (e.g., login returns a nested `{ user: { _id, role } }`, while cache loads yield a flat `{ _id, role }`). Forcing UI components to perform their own defensive checks creates a fragile codebase littered with Optional Chaining (`?.`).
+**Root problem**: The `User` shape returned by the backend isn't consistent — the login API returns a nested `{ user: { _id, role } }`, while reading from localStorage returns a flat `{ _id, role }`. Letting each UI component handle this difference on its own would scatter fragile optional-chaining (`?.`) across every call site.
 
-**The Decision**: Extracted logic into `PermissionService` utilizing the **Adapter Pattern**. Before any views consume role logic, payloads are universally funneled through `normalizeUser()`.
+**Decision**: `PermissionService` wraps this logic behind an **Adapter Pattern**. All role and permission logic passes through `normalizeUser()` before reaching the view layer — the single place in the entire project that handles this structural difference.
 
 ```javascript
 // permission.service.jsx
 static normalizeUser(userLike) {
   if (!userLike) return null;
-  if (userLike.user && typeof userLike.user === 'object') return userLike.user; // Nested
-  if (userLike._id || userLike.id) return userLike;                              // Flat
+  if (userLike.user && typeof userLike.user === 'object') return userLike.user; // nested shape
+  if (userLike._id || userLike.id) return userLike;                              // flat shape (supports both _id and id aliasing)
   return null;
 }
 ```
-**The Benefit**: When backend database schemas or API shapes mutate, maintenance is isolated squarely within this single method, achieving true decoupling of data contracts from UI representation.
+
+**Payoff**: If the backend's API shape changes later, the scope of the change is limited to this one method. The view layer stays completely unaware of shifts in the underlying data contract.
 
 ---
 
-### 4. Advanced Defensive Design Highlights
+### 4. Three Structural Defensive Guarantees
 
-** (A) Cross-Tab State Synchronization**
-If a user spans two browser tabs and logs out on Tab A, Tab B's failure to react presents a critical permission vulnerability. Utilizing the native browser `storage` event construct, the system drives global cross-tab zero-cost state mirroring.
+**(A) Cross-Tab State Synchronization**
+
+If a user opens two tabs and logs out in Tab A, and Tab B's auth state doesn't clear along with it, that's a genuine permission security gap. Wrapping the native `storage` event provides lightweight cross-tab state synchronization:
+
 ```javascript
 // useAuthUser.jsx
 window.addEventListener('storage', (e) => {
   if (e.key === 'user') {
-    try { setRaw(e.newValue ? JSON.parse(e.newValue) : null); }
-    catch { setRaw(null); } // Defensive fallback to prevent Hook crashes from JSON corruption
+    try {
+      setRaw(e.newValue ? JSON.parse(e.newValue) : null);
+    } catch {
+      setRaw(null);
+    } // fail-safe: corrupted JSON must not crash the hook
   }
 });
 ```
 
-** (B) Graceful Degradation via Boundaries (ErrorBoundary + Suspense)**
+**(B) Two-Layer Depth ErrorBoundary (Graceful Degradation)**
+
+Error isolation uses a two-layer depth design: an outer global `<ErrorBoundary>` wraps the entire `<Routes>` as a final backstop; each lazy-loaded route is wrapped again by its own `<ErrorBoundary>`, confining the blast radius of an error to a single page:
+
 ```jsx
-// App.jsx — Standard routing protection wrapper
-<ErrorBoundary fallback={<ErrorFallback />}>
-  <Suspense fallback={<PageLoader />}>
-    <Page {...props} />
-  </Suspense>
+// App.jsx — Two-layer depth defense structure
+<ErrorBoundary>
+  {' '}
+  {/* global final backstop */}
+  <Routes>
+    <ErrorBoundary fallback={<ErrorFallback />}>
+      {' '}
+      {/* route-level isolated guard */}
+      <Suspense fallback={<PageLoader />}>
+        {' '}
+        {/* async chunk loading state */}
+        <Page {...props} />
+      </Suspense>
+    </ErrorBoundary>
+  </Routes>
 </ErrorBoundary>
 ```
-The SPA splits dynamic chunks at the route level. While `Suspense` handles deterministic loading states, `ErrorBoundary` proactively quarantines asynchronous render exceptions. One module's internal crash will never compromise the global application integrity.
 
-** (C) Differentiated Promise Error Strategies**
-- **Querying** (e.g., Fetching course lists): Exceptions caught at the base layer return an empty array `[]`, defaulting into silent, Graceful Degradation without halting the render cycle.
-- **Mutations** (e.g., Dropping a course): Distinctly classifies server rejections (`error.response`) from timeouts (`error.request`), aggressively triggering Toasts so users are explicitly notified of side-effect failures.
+This confines a single module's crash within its boundary, keeping it from spreading to the rest of the app. A `ChunkLoadError` triggered by a production redeploy is isolated at the route boundary rather than bubbling up to the root.
+
+**(C) Read/Write-Split Error Handling Strategy**
+
+- **Read operations** (e.g. fetching a course list): the underlying catch returns an empty array `[]`, degrading gracefully and avoiding an interruption to overall rendering.
+- **Write operations** (e.g. dropping or adding a course): errors are intercepted and precisely distinguished between a server rejection (`error.response`) and a network disconnect (`error.request`), always surfacing a toast — ensuring the user gets clear feedback whenever a side-effecting operation fails.
 
 ---
 
-## System Architecture Diagram
+### 5. Frontend Performance Tuning: Critical Rendering Path Optimization
+
+**(A) Selective Lazy Loading (Not Blanket Lazy-Loading)**
+
+`HomePage` stays synchronously loaded to keep LCP as fast as possible. Secondary routes use `React.lazy()` for code splitting, substantially trimming the initial JS bundle size without sacrificing first-paint speed.
+
+**(B) Below-the-Fold Deferred Loading**
+
+`<Footer />` and other below-the-fold content are lazy-loaded at the component level, further improving TTI (time to interactive).
+
+**(C) ChunkLoadError Fault Tolerance**
+
+Every dynamically loaded chunk has its own `<Suspense>` skeleton transition and is wrapped in a local `<ErrorBoundary>`. When a production redeploy invalidates the cache, the result is an isolated error state rather than a blank white page.
+
+---
+
+## System Architecture
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Frontend as Frontend (UI/AuthService)
-    participant Backend as Backend (Passport/JWT)
+    participant Frontend as Frontend (UI / AuthService)
+    participant Interceptor as Axios Interceptor
+    participant Backend as Backend (Passport / JWT)
     participant Database
 
-    User->>Frontend: Login Credentials
+    User->>Frontend: Submit login credentials
     Frontend->>Backend: POST /api/user/login
-    Backend->>Database: Validate User
-    Database-->>Backend: User Found
-    Backend-->>Frontend: Return JWT Token
-    Frontend->>Frontend: Store Token & Init Auth State (App.jsx SSOT)
+    Backend->>Database: Verify user
+    Database-->>Backend: User exists
+    Backend-->>Frontend: Return JWT token
+
+    Frontend->>Frontend: Store token + initialize currentUser state (App.jsx SSOT)
 
     rect rgb(240, 248, 255)
-    note right of Frontend: Role-Based Rendering via PermissionService
-    Frontend->>Frontend: normalizeUser() → getPermissions()
-    Frontend-->>User: Render Role-Specific Dashboard (Instructor / Student)
+    note right of Frontend: Role-based rendering via PermissionService
+    Frontend->>Frontend: normalizeUser() -> getPermissions()
+    Frontend-->>User: Render the corresponding role dashboard (instructor / student)
     end
 
-    note over Frontend: Every subsequent request
-    Frontend->>Frontend: isTokenExpired()? → reject / attach token
-    Frontend->>Backend: API Request with Authorization header
-    Backend-->>Frontend: 200 OK / 401 Unauthorized
-    Frontend->>Frontend: 401? → clearToken() + redirect /login
+    note over Interceptor: On every subsequent API request
+    Interceptor->>Interceptor: isTokenExpired()? intercept directly
+    Interceptor->>Backend: attach token in Authorization header
+    Backend-->>Interceptor: 200 OK / 401 Unauthorized
+    Interceptor->>Frontend: 401 -> clearToken() + redirect /login
 ```
 
 ---
 
-## Tech Stack & Trade-offs
+## Technology Choices and Trade-offs
 
-| Technology | Reasoning (Engineering Trade-offs) |
-|------|----------------------|
-| **React 18 + Vite 6** | Abandoned bundle-based tooling for native ESM, slashing Production Build times down to 5.02s (>80% optimization). Concurrent Mode inherently pairs beautifully with our Suspense loading architecture. |
-| **React Router v6** | Nested Routes isolate structural layouts from page rendering, enabling `ErrorBoundary` to cover distinct failures globally with exact precision. |
-| **Axios (Custom Instance)** | The Interceptor mechanism serves as the backbone for the "Dual-Layer Token Defense". Falling back to native `fetch` would dilute this clean interception into sprawling, duplicate boilerplate. |
-| **Joi (Mirrored Schema)** | Syncing frontend form pre-checks with backend verification models ensures **absolute, end-to-end data consistency** from UI input directly to DB insertion. |
-| **Passport.js JWT** | Strategy Pattern implementation decouples identity verification from business logic, ensuring frictionless (Open/Closed Principle) scaling if OAuth strategies are integrated later. |
-| **Helmet.js** | Yields comprehensive baseline HTTP security headers (CSP, X-Frame-Options) with trivial configuration overhead. |
-| **MongoDB + Mongoose** | Features Two-Way Referencing between User & Course models. Valuing read velocity over write normalization, this averts full collection scans and optimizes the heavy read-loads inherently found in LMS applications. |
+| Technology                               | Rationale (engineering considerations)                                                                                                                                                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **React 18 + Vite 6**                    | Native ESM in place of a bundle-based ecosystem shrinks the production build to 5.02s; Concurrent Mode works well with the Suspense-based lazy-loading guard architecture.                                                           |
+| **React Router v6**                      | Nested routes + Outlet cleanly separate the layout shell from page rendering logic, letting ErrorBoundary cover failing modules with fine-grained precision.                                                                         |
+| **Axios (custom instance)**              | The interceptor mechanism is the key infrastructure behind the two-layer token defense; switching to native `fetch` would degrade the core interception logic into boilerplate scattered everywhere.                                 |
+| **Joi (shared frontend/backend schema)** | Frontend form pre-checks and backend route guards share the same schema design, keeping data validated to a consistent standard from UI input through to database writes.                                                            |
+| **Passport.js JWT**                      | The Strategy pattern decouples authentication from business logic; adding OAuth later follows the open/closed principle — existing routes wouldn't need to change.                                                                   |
+| **Helmet.js**                            | Automatically injects security HTTP headers (CSP, X-Frame-Options, etc.) at very low cost.                                                                                                                                           |
+| **MongoDB + Mongoose**                   | Two-way referencing between User and Course. Given the LMS's read-heavy, write-light usage pattern, this trades slightly higher write-maintenance cost for avoiding full collection scans, significantly improving read performance. |
 
 ---
 
-## Getting Started
+## Development and Deployment Guide
 
-### 1. Clone Project
+### 1. Clone the project
 
 ```bash
 git clone https://github.com/yuting813/course-management-system.git
 cd course-management-system
 ```
 
-### 2. Install Dependencies
+### 2. Install dependencies
 
 ```bash
 # Backend dependencies
@@ -186,70 +229,75 @@ npm install
 npm run clientinstall
 ```
 
-### 3. Environment Setup
+### 3. Configure environment variables
 
 ```bash
-# Create .env files based on provided examples
+# Create .env files in both the root and the client directory
 cp .env.example .env
 cd client && cp .env.example .env
 ```
 
-| Variable | Description |
-|------|------|
-| `MONGODB_CONNECTION` | MongoDB Atlas Connection String |
-| `JWT_SECRET` | Cryptographic key for JWT signatures |
-| `VITE_API_BASE_URL` | Backend API base path for frontend mapping |
+| Variable             | Description                                       |
+| -------------------- | ------------------------------------------------- |
+| `MONGODB_CONNECTION` | MongoDB Atlas connection string                   |
+| `JWT_SECRET`         | JWT signing secret (do not use the default value) |
+| `VITE_API_BASE_URL`  | Backend API base URL for the frontend             |
 
-### 4. Run Development Server
+### 4. Start the dev server
 
 ```bash
-npm run dev   # Boots both client and server concurrently
+npm run dev   # starts both frontend and backend concurrently (nodemon + Vite)
 ```
 
-### Deployment Pipeline
+### Deployment Architecture
 
-| Layer | Platform | Strategy |
-|------|------|------|
-| Frontend Assets | Vercel | Pushed to Edge Network w/ fully automated CI/CD triggers |
-| Backend API | Render | Hosted in scalable Node.js runtime environments |
-| Database | MongoDB Atlas | Managed cluster with rigid IP Allowlists for foundational security |
-
----
-
-## 🛠️ Technical Debt & Engineering Roadmap
-
-While the current architecture prioritizes development velocity and core stability, I have identified several strategic optimization points for enterprise-grade scaling:
-
-1. **Controller Pattern Refactoring**: 
-   - *Current*: Logic is coupled within route handlers (Fat Routes).
-   - *Roadmap*: Decouple business logic into a dedicated `controllers/` layer to enhance unit testability and follow the Single Responsibility Principle (SRP).
-
-2. **Authorization Standard Alignment**:
-   - *Current*: Custom `JWT` scheme for explicit educational clarity.
-   - *Roadmap*: Transition to the industry-standard `Bearer` scheme (RFC 6750) to ensure seamless compatibility with third-party API gateways and security tools.
-
-3. **Centralized Error Orchestration**:
-   - *Current*: Manual `try-catch` blocks with custom helper throws.
-   - *Roadmap*: Implement a global error-handling middleware with a hierarchy of `AppError` classes, ensuring consistent JSON error responses across all micro-segments of the API.
-
-4. **Professional Observability**:
-   - *Current*: Basic `console.log` for development debugging.
-   - *Roadmap*: Integrate a structured logging library (e.g., Winston or Pino) to categorize logs by severity levels and enable persistent log rotation for production auditing.
-
-5. **Distributed Caching Layer**:
-   - *Current*: Direct Database queries for every authentication check.
-   - *Roadmap*: Introduce Redis for session/user metadata caching to reduce DB I/O latency and improve response times for high-concurrency scenarios.
+| Layer                  | Platform      | Notes                                                       |
+| ---------------------- | ------------- | ----------------------------------------------------------- |
+| Frontend static assets | Vercel        | Deployed via Edge Network with automated CI/CD              |
+| Backend API            | Render        | Managed Node.js runtime                                     |
+| Database               | MongoDB Atlas | Managed database with IP allowlisting for baseline security |
 
 ---
 
-## About Me
+## Data Model
 
-With 6 years steeped in Procurement Management, I habitually engineer workflows tailored for high-risk compliance and rigorous fault tolerance—a mental model I aggressively port into my Frontend Architecture:
+```
+users/
+  { _id, username, email, password (bcrypt hash, stripped automatically by toJSON()), role, date, courses[] }
+  ↕ two-way reference (ObjectId)
+courses/
+  { _id, title, description, price, instructor (ref User), students[] (ref User), image, createdAt }
+```
 
-- **Procurement Compliance → Mirrored Full-Stack Schemas**: Mandating that polluted data variants are aggressively rejected at the UI entry layer, securing backend boundaries.
-- **Supplier Risk Management → Dual-Layer JWT Defense**: Preemptively intercepting known threat states (Expired Tokens) on the frontline, while guaranteeing a defensive fallback for untracked risks (Server Revokes).
+**Mongoose middleware design**: `pre('save')` auto-hashes the password on creation or modification; `toJSON()` strips the `password` field from every serialized response — the password never leaves the database layer.
 
-To me, maintainability and predictability are never mere buzzwords; they are meticulously built through countless `if (!user) return false` guards and resilient `catch` blocks.
+---
+
+## Technical Debt and Optimization Roadmap
+
+The current architecture prioritizes development speed and core stability. For future enterprise-scale needs, the following optimizations are planned:
+
+1. **Controller pattern refactor**: business logic is currently coupled to routes (fat routes). Extracting it into a `controllers/` layer would improve testability and align with the single responsibility principle.
+
+2. **Auth scheme alignment**: currently uses a custom `JWT` scheme for learning purposes. Migrating to the industry-standard `Bearer` scheme (RFC 6750) would ensure compatibility with third-party API gateways and security tooling.
+
+3. **Centralized error handling**: routes currently use manual `try-catch`. A global error middleware paired with a custom `AppError` class would unify the JSON error response shape site-wide.
+
+4. **Proper logging**: `console.log` is only suitable for development. Integrating a structured logging library like Winston or Pino would enable log levels and rotation for production auditing.
+
+5. **Distributed caching layer**: every authentication currently hits the database directly. Introducing Redis as a session/user-metadata cache would meaningfully reduce DB I/O pressure under high concurrency.
+
+---
+
+## About the Author
+
+With a background in procurement management, I've long carried the habit of **anticipating known failure modes** and **designing backstops for unpredictable risk**. That mental model maps directly onto software architecture:
+
+- **Procurement compliance specs → mirrored frontend/backend schemas**: dirty data is caught at the UI boundary, not discovered later at the database layer.
+- **Supplier risk tiering → two-layer JWT defense**: known risks (expired tokens) are actively blocked at the front line; unknown risks (server-side revocation) are caught by the backstop.
+- **Budget ROI discipline → frontend performance tuning**: network requests and bundle size are treated as constrained resources; every byte loaded should earn its place in the critical rendering path.
+
+To me, maintainability and predictability were never a slogan — they're built one `if (!user) return false` and one boundary `catch` block at a time.
 
 - **Website**: [tinahu.dev](https://www.tinahu.dev/)
 - **GitHub**: [yuting813](https://github.com/yuting813)
@@ -257,5 +305,5 @@ To me, maintainability and predictability are never mere buzzwords; they are met
 
 ---
 
-> **Educational Use Disclaimer**  
-> This project is developed solely for personal technical demonstration and educational purposes. All third-party trademarks, service names, and logos referenced in this project belong to their respective owners. No commercial use or affiliation is implied.
+> **Educational Use Disclaimer**
+> This project is solely for personal technical demonstration and learning purposes. All third-party trademarks, service names, and logos belong to their respective owners. This project involves no commercial activity and has no commercial affiliation with any third party.
