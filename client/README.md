@@ -1,155 +1,123 @@
-# Client (React) — 課程管理系統前端架構
+# Client (React + Vite) — 課程管理系統前端
 
-[Live Demo](https://img.shields.io/badge/Live%20Demo-Vercel-black?style=for-the-badge&logo=vercel)
+> 這是 MERN Course Management System 的 React 前端。本文件專注於目前已實作的路由、身分狀態、權限呈現、API 串接與建置方式。
 
-> 隸屬於 MERN Course Platform 的前端子專案。 本文件專注於說明 React 端如何透過 SOA 架構 與 權限驅動設計，解決前後端分離開發中的狀態同步與維護性問題。
+- **Live Demo**：[course.tinahu.dev](https://course.tinahu.dev/)
+- **完整架構與後端說明**：[根目錄 README](../README.zh-TW.md)
 
----
+## 技術棧
 
-## 專案定位
+- React 18
+- Vite 6
+- React Router v6
+- Axios
+- Joi
+- Vitest
+- Bootstrap 5 與專案自訂 CSS
 
-這是一個基於 React 開發的課程管理介面。負責處理複雜路由、身分驗證、權限動態渲染，以及課程 CRUD 的 UI 互動與 API 串接。 系統與後端（Express + MongoDB）透過環境變數 REACT_APP_API_BASE_URL 進行解耦通訊，確保開發與部署環境的靈活性。
+## 目前實作重點
 
-## 工程亮點 (Engineering Highlights)
+### 路由級 Code Splitting
 
-這裡不僅是實作功能，更著重於 可維護性 (Maintainability) 與 系統設計 (System Design)：
+`HomePage` 同步載入；其他主要頁面使用 `React.lazy` 與 `Suspense` 切分 chunk。每個 lazy route 都有路由級 `ErrorBoundary`，外層再保留一個全域邊界。
 
-### 1. 系統架構設計 (Service-Oriented Architecture)
+### 嵌套路由與 Layout
 
-- **設計決策**：採用 SOA 概念，將 API 請求與業務邏輯（Business Logic）完全抽離至 `Service Layer`。
-- **效益**：確保 UI 組件（View）與 API 資料結構（Model）解耦。若後端 API 欄位變更，僅需修改 Service 層，無需查找並修改所有 UI 組件，大幅降低維護成本。
+`Layout` 透過 React Router 的 `Outlet` 共用導覽列、主內容區與 Footer，頁面路由定義集中在 `App.jsx`。
 
-### 2. 語意化權限控制 (Semantic Permission Logic)
+### 登入狀態與 Token 生命週期
 
-- **設計決策**：實作 `PermissionService` 與 `useAuthUser` Hook。
-- **效益**：UI 組件僅根據「語意旗標」（如 `canEdit`, `isInstructor`）進行渲染，而非直接在 JSX 中判斷 `user.role === 'teacher'` 等原始資料。這提升了代碼的可讀性，也讓權限邏輯集中管理，便於測試。
+- `App.jsx` 管理主要 UI 的 `currentUser` state。
+- 登入回應 `{ token, user }` 儲存在 `localStorage`。
+- Axios request interceptor 從 localStorage 讀取 Token，先檢查 JWT `exp`，再附加至 `Authorization` header。
+- Axios response interceptor 統一處理非登入請求的 `401`。
+- `useAuthUser` 監聽 `storage` event，同步其內部的跨頁籤狀態。
 
-### 3. 狀態可預測性 (Predictable State)
+目前後端使用 Passport JWT 的自訂 `JWT` authorization scheme，Token 字串形式為 `JWT <token>`，不是 Bearer scheme。
 
-- **設計決策**：針對 API 的生命週期——加載中（Loading）、權限不足（Forbidden）與錯誤情境（Error Handling）——實作一致的 UI 處理機制。
-- **效益**：消除「介面閃爍」或「無回應」的體驗，確保用戶在各種邊際情況（Edge Cases）下都能獲得連貫的系統回饋。
+### 語意化權限邏輯
 
-### 4. 性能優化 (Performance & UX)
+`PermissionService` 與 `useAuthUser` 提供：
 
-- **設計決策**：
-- **Code Splitting**：導入 Route-based Code Splitting，利用 `React.lazy` + `Suspense` 減少首屏加載體積（Bundle Size）。
-- **Art Direction**：針對響應式圖片採用 Art Direction 技術，精準控制 Mobile/Desktop 下載不同尺寸的資源，節省頻寬並提升 LCP (Largest Contentful Paint) 指標。
+- `isInstructor` / `isStudent`
+- `canCreateCourse`
+- `canEnrollCourse`
+- `canEditCourse`
+- `canDropCourse`
+- `getCourseActions`
+- `getCoursesFetcher`
 
-## 技術棧與重點速覽 (Tech Stack & TL;DR)
+課程頁面的主要操作使用這些語意化方法。少數路由入口仍直接檢查 `currentUser.user.role`，後端 API 會再次執行真正的授權檢查。
 
-- **Core**: React 18, React Router v6
-- **Network**: Axios (Encapsulated in Service Layer)
-- **UI Framework**: Bootstrap 5 (Customized)
-- **Optimization**: React.lazy + Suspense
-- **Auth**: JWT (Bearer Token) + LocalStorage Persistence
-- **Deployment**: Express Static Serving (Production) + Catch-all Route
+## 專案結構
 
-## 專案結構 (Project Structure)
-
-設計思維：UI 僅使用語意旗標，不直接讀取後端 Raw Data 結構，降低耦合度。
-
-```
+```text
 client/src/
-├── components/           # 可復用 UI 組件（視覺與邏輯分離）
-│   ├── CourseCard/       # 課程卡片（封裝權限判斷，內部消化 canEdit 邏輯）
-│   ├── Navigation/       # 導航列（含 Responsive Menu）
-│   └── common/           # 通用組件（Spinner, Alert, Modal - 確保全站 UI 一致性）
-├── pages/                # 頁面級組件（配合 React.lazy 進行路由層級拆分）
-├── services/             # API 服務層（Service Layer / API Clients）
-│   ├── auth.service.js   # 封裝註冊、登入與 Token 管理
-│   └── course.service.js # 封裝課程 CRUD，自動夾帶 Auth Header
-├── hooks/                # 自定義 Hooks（業務邏輯抽離，如 useAuthUser）
-├── utils/                # 工具函數（資料正規化 normalizeUser）
-├── styles/               # 全局與組件樣式
-└── validation/           # 前端表單驗證（Joi Schemas）
-
+├── components/
+│   ├── common/       # Alert、ErrorBoundary、Fallback、Loader
+│   ├── course/       # 課程卡片、詳情、編輯 Modal、骨架畫面
+│   ├── home/         # 首頁 Banner 與輪播內容
+│   └── layout/       # Nav、Layout、Footer
+├── hooks/                # useAuthUser、useFormWithJoi
+├── pages/                # 路由頁面
+├── services/             # Axios instance、Auth、Course、Permission services
+├── styles/               # 全域與元件樣式
+├── utils/                # JWT、使用者、時間與驗證工具
+└── validation/schemas/   # 前端 Joi schemas
 ```
 
-## 認證與權限架構 (Auth & Permissions)
+## API 對接表
 
-### 1. 狀態管理與持久化
+| 方法 | Endpoint | 用途 | 後端權限 |
+|---|---|---|---|
+| `POST` | `/api/user/register` | 註冊 | 公開；講師需邀請碼 |
+| `POST` | `/api/user/login` | 登入 | 公開 |
+| `GET` | `/api/courses` | 課程清單與搜尋 | 公開 |
+| `GET` | `/api/courses/instructor/:id` | 查詢講師課程 | 公開 |
+| `GET` | `/api/courses/student/:id` | 查詢學生已選課程 | 公開 |
+| `POST` | `/api/courses` | 建立課程 | 講師 |
+| `PATCH` | `/api/courses/:id` | 編輯課程 | 課程所有者 |
+| `DELETE` | `/api/courses/:id` | 刪除課程 | 課程所有者 |
+| `POST` | `/api/courses/enroll/:id` | 選課 | 學生 |
+| `POST` | `/api/courses/drop/:id` | 退選 | 學生 |
 
-- **流程**：登入成功後，前端將 `{ token, user }` 存入 `localStorage`。
-- **安全性**：Service Layer 在發出請求時，會自動從持久化存儲讀取 Token，並注入 Axios 的 `Authorization` Header，確保 Token 不會暴露在 URL 或不必要的組件 Props 中。
-
-### 2. 語意化權限判斷 (Code Example)
-
-透過自定義 Hook 封裝複雜邏輯，讓組件內代碼保持「宣告式（Declarative）」的簡潔風格：
-
-```jsx
-// 範例：在課程列表頁面
-// UI 不需知道 "誰" 是老師，只需知道 "如何" 獲取數據
-const { uid, isInstructor, getCoursesFetcher } = useAuthUser(currentUser);
-
-useEffect(() => {
-  // 透過 Service Layer 取得正確的 Fetcher（多型策略）
-  // 學生 => 獲取已註冊課程; 講師 => 獲取已發布課程
-  const fetcher = getCoursesFetcher();
-
-  if (uid) {
-    fetcher(uid).then(setCourseData).catch(handleError); // 統一錯誤處理
-  }
-}, [getCoursesFetcher, uid]);
-```
-
-## RESTful API 對接表
-
-前端透過統一的介面與後端溝通，以下為核心功能對接：
-
-| 方法  | 端點 (Endpoint)         | 功能描述      | 權限要求              |
-| ----- | ----------------------- | ------------- | --------------------- |
-| POST  | /api/user/login         | 用戶登入      | 公開                  |
-| GET   | /api/courses            | 獲取課程列表  | 認證用戶              |
-| POST  | /api/courses            | 建立新課程    | 講師限定 (Instructor) |
-| PATCH | /api/courses/:id        | 更新課程內容  | 課程持有者 (Owner)    |
-| POST  | /api/courses/enroll/:id | 註冊/選修課程 | 學生限定 (Student)    |
-
-## 開發環境設定 (Development Setup)
+## 開發設定
 
 ```bash
-# 1. 進入前端目錄
 cd client
-
-# 2. 安裝依賴
 npm install
-
-# 3. 配置環境變數
-# 請確保 .env 中的 REACT_APP_API_BASE_URL 正確指向後端
 cp .env.example .env
-
-# 4. 啟動開發伺服器
 npm start
-
 ```
 
-## 建置與部署 (Build & Deploy)
+`.env` 使用 Vite 變數：
 
-本專案採用 Hybrid Deployment 策略，Production 環境下由後端伺服器託管前端資源。
+```env
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+Vite development server 預設於 `http://localhost:3000`，並將 `/api` proxy 到 `http://localhost:8080`。
+
+## 測試與建置
 
 ```bash
-# 產出物位於: client/build 目錄
+npm test -- --run
+npm run lint
 npm run build
-
 ```
 
-**Production 運作邏輯**：
+Vite 建置輸出至 `client/build`，以相容於後端的 Express static serving 設定。
 
-1. 後端 Express 配置靜態資源服務指向 `client/build`。
-2. **關鍵配置**：後端需配置「萬用路由（Catch-all Route）」，將所有非 API 請求重導向至 `index.html`，以支援 React Router 的 History Mode 運作（避免重新整理後 404）。
+## 部署方式
 
-## 疑難排解 (Troubleshooting)
+目前對外展示的架構是：
 
-**SPA 404 錯誤**
+- 前端：Vercel
+- 後端 API：Render
+- 資料庫：MongoDB Atlas
 
-- **現象**：在子路由（如 `/courses/edit`）重新整理頁面時出現 404。
-- **解法**：確認後端是否已正確配置 `app.get('*', ...)` 轉向 `index.html`。
+專案也保留 Express 在 `NODE_ENV=production` 時提供 `client/build` 與 SPA catch-all route 的能力，供合併部署使用。
 
-**API 連線失敗**
+## 安全取捨
 
-- **檢查**：打開瀏覽器 DevTools Network 面板，檢查 Request URL 是否正確。
-- **解法**：確認 `.env` 中的 `REACT_APP_API_BASE_URL` 是否包含 `http://` 協議前綴及正確 Port 號。
-
-**CORS 問題**
-
-- **現象**：Console 出現 "Access-Control-Allow-Origin" 錯誤。
-- **解法**：開發模式下，請確認後端 Express 的 `cors()` 中介軟體已放行前端開發網域（如 `localhost:3000`）。
+Token 目前儲存於 localStorage，優點是實作直接且適合此展示型專案；取捨是 Token 可能在 XSS 情境中被前端 JavaScript 讀取。若擴展為處理真實敏感資料的產品，應連同 CSRF 防護一起評估 HttpOnly、Secure cookie 方案。
