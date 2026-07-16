@@ -4,6 +4,13 @@ const Course = require('../models').course;
 const User = require('../models').user;
 const { courseValidation } = require('../validation');
 
+const requireStudent = (req, res, next) => {
+  if (!req.user?.isStudent()) {
+    return res.status(403).json({ message: '只有學生才能進行選課或退選。' });
+  }
+  return next();
+};
+
 router.use((req, res, next) => {
   console.log('course route正在接受一個request...');
   next();
@@ -114,6 +121,7 @@ router.post(
 router.post(
   '/enroll/:_id',
   passport.authenticate('jwt', { session: false }),
+  requireStudent,
   async (req, res) => {
     let { _id } = req.params;
     try {
@@ -124,8 +132,15 @@ router.post(
         return res.status(400).json({ message: '您已經註冊過這門課程' });
       }
 
-      course.students.push(req.user._id);
-      await course.save();
+      course.students.addToSet(req.user._id);
+
+      await Promise.all([
+        course.save(),
+        User.updateOne(
+          { _id: req.user._id },
+          { $addToSet: { courses: course._id } }
+        ),
+      ]);
       return res.json({ message: '註冊完成' });
     } catch (e) {
       return res.status(500).json({ message: '註冊失敗', error: e.message });
@@ -199,6 +214,7 @@ router.delete(
 router.post(
   '/drop/:_id',
   passport.authenticate('jwt', { session: false }),
+  requireStudent,
   async (req, res) => {
     let { _id } = req.params;
     try {
@@ -207,26 +223,24 @@ router.post(
         return res.status(404).json({ message: '找不到課程' });
       }
 
-      let student = await User.findById(req.user._id);
-      if (!student) {
-        return res.status(404).json({ message: '找不到學生資料' });
-      }
-
       // 檢查學生是否已經註冊這門課程
-      const studentIndex = course.students.indexOf(req.user._id);
-      if (studentIndex === -1) {
+      const isEnrolled = course.students.some((studentId) =>
+        studentId.equals(req.user._id)
+      );
+      if (!isEnrolled) {
         return res.status(400).json({ message: '您尚未註冊這門課程' });
       }
 
-      // 從課程的學生列表中移除該學生
-      course.students = course.students.filter(
-        (id) => !id.equals(req.user._id)
-      );
-      await course.save();
-
-      // 從學生的課程列表中移除該課程
-      student.courses = student.courses.filter((id) => !id.equals(course._id));
-      await student.save();
+      await Promise.all([
+        Course.updateOne(
+          { _id: course._id },
+          { $pull: { students: req.user._id } }
+        ),
+        User.updateOne(
+          { _id: req.user._id },
+          { $pull: { courses: course._id } }
+        ),
+      ]);
 
       return res.status(200).json({ message: '成功退選課程' });
     } catch (e) {

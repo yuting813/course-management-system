@@ -1,4 +1,4 @@
-module.exports = (err, req, res, next) => {
+module.exports = (err, req, res, _next) => {
   // 記錄錯誤日誌（可串接 Winston 或其他 Log 服務）
   console.error('[Error Middleware]', err.stack);
 

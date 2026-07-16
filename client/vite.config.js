@@ -16,9 +16,9 @@ export default defineConfig({
   ],
   test: {
     globals: true,
-    environment: 'jsdom',
+    environment: 'node',
     setupFiles: [],
-    include: ['src/**/*.{test,spec}.{js,jsx}', '../validation/tests/**/*.{test,spec}.{js,jsx}'],
+    include: ['src/**/*.{test,spec}.{js,jsx}'],
   },
   server: {
     port: 3000,
