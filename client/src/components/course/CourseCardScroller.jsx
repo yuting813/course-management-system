@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import CourseService from '../../services/course.service';
 import CourseCard from './CourseCard';
+import CourseHoverPopover from './CourseHoverPopover';
 import ScrollButton from './ScrollButton';
 import CourseSkeleton from './CourseSkeleton';
 
@@ -8,12 +9,44 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
   const [courses, setCourses] = useState([]);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(true);
-  const [nearRightEdge, setNearRightEdge] = useState([]);
+  const [hoveredCourse, setHoveredCourse] = useState(null);
+  const [anchorRect, setAnchorRect] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const containerRef = useRef(null);
   const cardsRef = useRef([]);
+  const closeTimerRef = useRef(null);
+
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  const closePopover = useCallback(() => {
+    clearCloseTimer();
+    setHoveredCourse(null);
+    setAnchorRect(null);
+  }, [clearCloseTimer]);
+
+  const scheduleClosePopover = useCallback(() => {
+    clearCloseTimer();
+    closeTimerRef.current = setTimeout(() => {
+      setHoveredCourse(null);
+      setAnchorRect(null);
+    }, 120);
+  }, [clearCloseTimer]);
+
+  const handleCardMouseEnter = useCallback(
+    (course, cardElement) => {
+      clearCloseTimer();
+      setHoveredCourse(course);
+      setAnchorRect(cardElement.getBoundingClientRect());
+    },
+    [clearCloseTimer]
+  );
 
   const checkScrollState = useCallback(() => {
     if (!containerRef.current) return;
@@ -25,19 +58,8 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
     setShowLeftArrow(!isAtStart);
     setShowRightArrow(!isAtEnd);
 
-    const threshold = 100;
-    setNearRightEdge(
-      cardsRef.current.map((card) => {
-        if (!card) return false;
-        const cardRect = card.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        return (
-          cardRect.left < containerRect.right &&
-          containerRect.right - cardRect.right < threshold
-        );
-      })
-    );
-  }, [setNearRightEdge]);
+    closePopover();
+  }, [closePopover]);
 
   const scroll = useCallback(
     (direction) => {
@@ -82,13 +104,16 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
     const container = containerRef.current;
     if (container) {
       container.addEventListener('scroll', checkScrollState);
+      window.addEventListener('scroll', closePopover, { passive: true });
       window.addEventListener('resize', checkScrollState);
       return () => {
         container.removeEventListener('scroll', checkScrollState);
+        window.removeEventListener('scroll', closePopover);
         window.removeEventListener('resize', checkScrollState);
+        clearCloseTimer();
       };
     }
-  }, [checkScrollState]);
+  }, [checkScrollState, clearCloseTimer, closePopover]);
 
   // 添加觸摸滑動支持
   useEffect(() => {
@@ -153,7 +178,8 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
             course={course}
             showAlert={showAlert}
             currentUser={currentUser}
-            isNearRightEdge={nearRightEdge[index]}
+            onCardMouseEnter={handleCardMouseEnter}
+            onCardMouseLeave={scheduleClosePopover}
           />
         ))}
       </div>
@@ -161,6 +187,14 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
         direction="right"
         onClick={() => scroll('right')}
         isVisible={showRightArrow}
+      />
+      <CourseHoverPopover
+        course={hoveredCourse}
+        anchorRect={anchorRect}
+        showAlert={showAlert}
+        currentUser={currentUser}
+        onMouseEnter={clearCloseTimer}
+        onMouseLeave={scheduleClosePopover}
       />
     </div>
   );
