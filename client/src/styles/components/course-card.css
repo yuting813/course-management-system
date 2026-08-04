@@ -34,6 +34,24 @@
   position: fixed;
   z-index: 2000;
   pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+  will-change: opacity, transform;
+}
+
+.course-hover-popover.is-closing {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px) scale(0.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .course-hover-popover {
+    transition: none;
+  }
 }
 
 .course-details-wrapper.align-right {

@@ -14,8 +14,10 @@ const CourseHoverPopover = ({
   anchorRect,
   showAlert,
   currentUser,
+  isClosing,
   onMouseEnter,
   onMouseLeave,
+  onWheel,
 }) => {
   const position = useMemo(() => {
     if (!anchorRect) return null;
@@ -56,10 +58,11 @@ const CourseHoverPopover = ({
     <div
       className={`course-hover-popover ${
         position.alignRight ? 'align-right' : 'align-left'
-      }`}
+      } ${isClosing ? 'is-closing' : ''}`}
       style={position.style}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      onWheelCapture={onWheel}
     >
       <CourseDetails
         course={course}

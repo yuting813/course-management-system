@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import CourseService from '../../services/course.service';
 import CourseCard from './CourseCard';
 import CourseHoverPopover from './CourseHoverPopover';
@@ -11,60 +12,51 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
   const [showRightArrow, setShowRightArrow] = useState(true);
   const [hoveredCourse, setHoveredCourse] = useState(null);
   const [anchorRect, setAnchorRect] = useState(null);
+  const [isPopoverClosing, setIsPopoverClosing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const containerRef = useRef(null);
   const cardsRef = useRef([]);
   const closeTimerRef = useRef(null);
-  const anchorElementRef = useRef(null);
 
   const clearCloseTimer = useCallback(() => {
     if (closeTimerRef.current) {
       clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
     }
+    setIsPopoverClosing(false);
   }, []);
 
   const closePopover = useCallback(() => {
     clearCloseTimer();
-    anchorElementRef.current = null;
     setHoveredCourse(null);
     setAnchorRect(null);
+    setIsPopoverClosing(false);
+  }, [clearCloseTimer]);
+
+  const closePopoverImmediately = useCallback(() => {
+    clearCloseTimer();
+    flushSync(() => {
+      setHoveredCourse(null);
+      setAnchorRect(null);
+      setIsPopoverClosing(false);
+    });
   }, [clearCloseTimer]);
 
   const scheduleClosePopover = useCallback(() => {
     clearCloseTimer();
+    setIsPopoverClosing(true);
     closeTimerRef.current = setTimeout(() => {
-      anchorElementRef.current = null;
       setHoveredCourse(null);
       setAnchorRect(null);
+      setIsPopoverClosing(false);
     }, 120);
   }, [clearCloseTimer]);
-
-  const updatePopoverPosition = useCallback(() => {
-    const anchorElement = anchorElementRef.current;
-    if (!anchorElement) return;
-
-    const nextRect = anchorElement.getBoundingClientRect();
-    const isVisible =
-      nextRect.bottom > 0 &&
-      nextRect.top < window.innerHeight &&
-      nextRect.right > 0 &&
-      nextRect.left < window.innerWidth;
-
-    if (!isVisible) {
-      closePopover();
-      return;
-    }
-
-    setAnchorRect(nextRect);
-  }, [closePopover]);
 
   const handleCardMouseEnter = useCallback(
     (course, cardElement) => {
       clearCloseTimer();
-      anchorElementRef.current = cardElement;
       setHoveredCourse(course);
       setAnchorRect(cardElement.getBoundingClientRect());
     },
@@ -81,8 +73,8 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
     setShowLeftArrow(!isAtStart);
     setShowRightArrow(!isAtEnd);
 
-    updatePopoverPosition();
-  }, [updatePopoverPosition]);
+    closePopover();
+  }, [closePopover]);
 
   const scroll = useCallback(
     (direction) => {
@@ -127,18 +119,16 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
     const container = containerRef.current;
     if (container) {
       container.addEventListener('scroll', checkScrollState);
-      window.addEventListener('scroll', updatePopoverPosition, {
-        passive: true,
-      });
+      window.addEventListener('scroll', closePopover, { passive: true });
       window.addEventListener('resize', checkScrollState);
       return () => {
         container.removeEventListener('scroll', checkScrollState);
-        window.removeEventListener('scroll', updatePopoverPosition);
+        window.removeEventListener('scroll', closePopover);
         window.removeEventListener('resize', checkScrollState);
         clearCloseTimer();
       };
     }
-  }, [checkScrollState, clearCloseTimer, updatePopoverPosition]);
+  }, [checkScrollState, clearCloseTimer, closePopover]);
 
   // 添加觸摸滑動支持
   useEffect(() => {
@@ -189,7 +179,7 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
   if (courses.length === 0) return <div>目前沒有可用的課程</div>;
 
   return (
-    <div className="course-card-scroller">
+    <div className="course-card-scroller" onWheelCapture={closePopoverImmediately}>
       <ScrollButton
         direction="left"
         onClick={() => scroll('left')}
@@ -218,8 +208,10 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
         anchorRect={anchorRect}
         showAlert={showAlert}
         currentUser={currentUser}
+        isClosing={isPopoverClosing}
         onMouseEnter={clearCloseTimer}
         onMouseLeave={scheduleClosePopover}
+        onWheel={closePopoverImmediately}
       />
     </div>
   );
