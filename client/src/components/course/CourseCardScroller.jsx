@@ -17,6 +17,7 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
   const containerRef = useRef(null);
   const cardsRef = useRef([]);
   const closeTimerRef = useRef(null);
+  const anchorElementRef = useRef(null);
 
   const clearCloseTimer = useCallback(() => {
     if (closeTimerRef.current) {
@@ -27,6 +28,7 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
 
   const closePopover = useCallback(() => {
     clearCloseTimer();
+    anchorElementRef.current = null;
     setHoveredCourse(null);
     setAnchorRect(null);
   }, [clearCloseTimer]);
@@ -34,14 +36,35 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
   const scheduleClosePopover = useCallback(() => {
     clearCloseTimer();
     closeTimerRef.current = setTimeout(() => {
+      anchorElementRef.current = null;
       setHoveredCourse(null);
       setAnchorRect(null);
     }, 120);
   }, [clearCloseTimer]);
 
+  const updatePopoverPosition = useCallback(() => {
+    const anchorElement = anchorElementRef.current;
+    if (!anchorElement) return;
+
+    const nextRect = anchorElement.getBoundingClientRect();
+    const isVisible =
+      nextRect.bottom > 0 &&
+      nextRect.top < window.innerHeight &&
+      nextRect.right > 0 &&
+      nextRect.left < window.innerWidth;
+
+    if (!isVisible) {
+      closePopover();
+      return;
+    }
+
+    setAnchorRect(nextRect);
+  }, [closePopover]);
+
   const handleCardMouseEnter = useCallback(
     (course, cardElement) => {
       clearCloseTimer();
+      anchorElementRef.current = cardElement;
       setHoveredCourse(course);
       setAnchorRect(cardElement.getBoundingClientRect());
     },
@@ -58,8 +81,8 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
     setShowLeftArrow(!isAtStart);
     setShowRightArrow(!isAtEnd);
 
-    closePopover();
-  }, [closePopover]);
+    updatePopoverPosition();
+  }, [updatePopoverPosition]);
 
   const scroll = useCallback(
     (direction) => {
@@ -104,16 +127,18 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
     const container = containerRef.current;
     if (container) {
       container.addEventListener('scroll', checkScrollState);
-      window.addEventListener('scroll', closePopover, { passive: true });
+      window.addEventListener('scroll', updatePopoverPosition, {
+        passive: true,
+      });
       window.addEventListener('resize', checkScrollState);
       return () => {
         container.removeEventListener('scroll', checkScrollState);
-        window.removeEventListener('scroll', closePopover);
+        window.removeEventListener('scroll', updatePopoverPosition);
         window.removeEventListener('resize', checkScrollState);
         clearCloseTimer();
       };
     }
-  }, [checkScrollState, clearCloseTimer, closePopover]);
+  }, [checkScrollState, clearCloseTimer, updatePopoverPosition]);
 
   // 添加觸摸滑動支持
   useEffect(() => {
