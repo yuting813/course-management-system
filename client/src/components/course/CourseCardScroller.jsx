@@ -19,6 +19,7 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
   const containerRef = useRef(null);
   const cardsRef = useRef([]);
   const closeTimerRef = useRef(null);
+  const isPopoverOpen = Boolean(hoveredCourse && anchorRect);
 
   const clearCloseTimer = useCallback(() => {
     if (closeTimerRef.current) {
@@ -63,7 +64,7 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
     [clearCloseTimer]
   );
 
-  const checkScrollState = useCallback(() => {
+  const updateScrollButtons = useCallback(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
     const { scrollLeft, scrollWidth, clientWidth } = container;
@@ -72,9 +73,12 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
 
     setShowLeftArrow(!isAtStart);
     setShowRightArrow(!isAtEnd);
+  }, []);
 
+  const handleCourseGridScroll = useCallback(() => {
+    updateScrollButtons();
     closePopover();
-  }, [closePopover]);
+  }, [closePopover, updateScrollButtons]);
 
   const scroll = useCallback(
     (direction) => {
@@ -85,9 +89,9 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
         left: direction === 'right' ? scrollDistance : -scrollDistance,
         behavior: 'smooth',
       });
-      setTimeout(checkScrollState, 500); // 滾動完成後檢查狀態
+      setTimeout(updateScrollButtons, 500); // 滾動完成後檢查狀態
     },
-    [checkScrollState]
+    [updateScrollButtons]
   );
 
   useEffect(() => {
@@ -105,7 +109,7 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
         const response = await CourseService.getAllCourses();
         const shuffledCourses = shuffleArray(response.data);
         setCourses(shuffledCourses);
-        setTimeout(checkScrollState, 0);
+        setTimeout(updateScrollButtons, 0);
       } catch (error) {
         console.error('獲取課程資料失敗:', error);
         setError('獲取課程資料失敗');
@@ -115,20 +119,37 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
     };
 
     fetchCourses();
+  }, [updateScrollButtons]);
 
+  useEffect(() => {
     const container = containerRef.current;
-    if (container) {
-      container.addEventListener('scroll', checkScrollState);
-      window.addEventListener('scroll', closePopover, { passive: true });
-      window.addEventListener('resize', checkScrollState);
-      return () => {
-        container.removeEventListener('scroll', checkScrollState);
-        window.removeEventListener('scroll', closePopover);
-        window.removeEventListener('resize', checkScrollState);
-        clearCloseTimer();
-      };
-    }
-  }, [checkScrollState, clearCloseTimer, closePopover]);
+    if (!container) return undefined;
+
+    container.addEventListener('scroll', handleCourseGridScroll);
+    return () => {
+      container.removeEventListener('scroll', handleCourseGridScroll);
+    };
+  }, [handleCourseGridScroll]);
+
+  useEffect(() => {
+    if (!isPopoverOpen) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') closePopover();
+    };
+
+    window.addEventListener('scroll', closePopover, { passive: true });
+    window.addEventListener('resize', closePopover);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('scroll', closePopover);
+      window.removeEventListener('resize', closePopover);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closePopover, isPopoverOpen]);
+
+  useEffect(() => clearCloseTimer, [clearCloseTimer]);
 
   // 添加觸摸滑動支持
   useEffect(() => {
