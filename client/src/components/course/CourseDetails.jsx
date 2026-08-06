@@ -108,7 +108,7 @@ const CourseDetails = ({ course, showAlert, currentUser }) => {
     //   }}
     // >
 
-    <div className="course-details-card d-flex flex-column h-100">
+    <div className="course-details-card d-flex flex-column">
       <h5 className="fw-bold mb-2 lh-base">{course.title}</h5>
       
       <div className="d-flex align-items-center mb-2">
@@ -120,30 +120,32 @@ const CourseDetails = ({ course, showAlert, currentUser }) => {
         總計 {7} 小時 · 所有級別 · 字幕
       </div>
 
-      <p className="small mb-3 lh-sm" style={{ color: '#1c1d1f' }}>
-        {course.description}
-      </p>
+      <div className="course-details-body">
+        <p className="small mb-3 lh-sm course-details-description" style={{ color: '#1c1d1f' }}>
+          {course.description}
+        </p>
 
       {/* 模擬的課程特點清單 */}
-      <ul className="list-unstyled small mb-4 flex-grow-1" style={{ color: '#1c1d1f' }}>
-        <li className="d-flex align-items-start mb-2">
+        <ul className="list-unstyled small mb-0 course-details-points" style={{ color: '#1c1d1f' }}>
+          <li className="d-flex align-items-start mb-2">
           <span className="me-2 mt-1">✓</span>
-          <span>了解 {course.title} 的核心基礎與架構</span>
-        </li>
-        <li className="d-flex align-items-start mb-2">
+          <span className="course-details-point-text">了解課程核心基礎與架構</span>
+          </li>
+          <li className="d-flex align-items-start mb-2">
           <span className="me-2 mt-1">✓</span>
-          <span>掌握實務技巧，應用於真實專案開發</span>
-        </li>
-        <li className="d-flex align-items-start mb-2">
+          <span className="course-details-point-text">掌握實務技巧，應用於真實專案開發</span>
+          </li>
+          <li className="d-flex align-items-start mb-2">
           <span className="me-2 mt-1">✓</span>
-          <span>深入淺出解析困難概念，從小白到精通</span>
-        </li>
-      </ul>
+          <span className="course-details-point-text">循序解析困難概念，建立完整理解</span>
+          </li>
+        </ul>
+      </div>
 
       <button
         type="button"
         onClick={handleEnroll}
-        className="btn btn-purple py-2 fw-bold w-100 mt-auto"
+        className="btn btn-purple py-2 fw-bold w-100 mt-3"
         style={{ borderRadius: '8px' }}
         disabled={isEnrolled || isEnrolling}
       >

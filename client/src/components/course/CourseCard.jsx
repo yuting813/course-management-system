@@ -3,12 +3,32 @@ import CourseImage from './CourseImage';
 import CourseDetails from './CourseDetails';
 
 const CourseCard = forwardRef(
-  ({ course, showAlert, currentUser, isNearRightEdge }, ref) => {
+  (
+    {
+      course,
+      showAlert,
+      currentUser,
+      onCardMouseEnter,
+      onCardMouseMove,
+      onCardPointerDown,
+      onCardMouseLeave,
+    },
+    ref
+  ) => {
+    const handlePointerDown = (event) => {
+      if (event.target.closest?.('button, a, input, select, textarea')) return;
+      onCardPointerDown?.(course, event.currentTarget);
+    };
+
     return (
       <div
         ref={ref}
         className="card me-3 p-2 position-relative mb-4 course-card shadow-sm"
         style={{ borderRadius: '12px' }}
+        onMouseEnter={(event) => onCardMouseEnter?.(course, event.currentTarget)}
+        onMouseMove={(event) => onCardMouseMove?.(course, event.currentTarget)}
+        onPointerDown={handlePointerDown}
+        onMouseLeave={onCardMouseLeave}
       >
         <div className="course-imager">
           <CourseImage course={course} />
@@ -36,11 +56,7 @@ const CourseCard = forwardRef(
           </div>
         </div>
 
-        <div
-          className={`course-details-wrapper ${
-            isNearRightEdge ? 'align-left' : 'align-right'
-          }`}
-        >
+        <div className="course-details-inline">
           <CourseDetails
             course={course}
             showAlert={showAlert}

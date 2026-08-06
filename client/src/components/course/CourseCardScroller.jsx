@@ -1,21 +1,120 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import CourseService from '../../services/course.service';
 import CourseCard from './CourseCard';
+import CourseHoverPopover from './CourseHoverPopover';
 import ScrollButton from './ScrollButton';
 import CourseSkeleton from './CourseSkeleton';
+
+const HOVER_CLOSE_GRACE_MS = 140;
+const POPOVER_EXIT_ANIMATION_MS = 150;
 
 const CourseCardScroller = ({ showAlert, currentUser }) => {
   const [courses, setCourses] = useState([]);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(true);
-  const [nearRightEdge, setNearRightEdge] = useState([]);
+  const [hoveredCourse, setHoveredCourse] = useState(null);
+  const [anchorRect, setAnchorRect] = useState(null);
+  const [isPopoverClosing, setIsPopoverClosing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const containerRef = useRef(null);
   const cardsRef = useRef([]);
+  const closeGraceTimerRef = useRef(null);
+  const exitAnimationTimerRef = useRef(null);
+  const activePreviewCourseIdRef = useRef(null);
+  const isPopoverOpen = Boolean(hoveredCourse && anchorRect);
 
-  const checkScrollState = useCallback(() => {
+  const clearCloseTimer = useCallback(() => {
+    if (closeGraceTimerRef.current) {
+      clearTimeout(closeGraceTimerRef.current);
+      closeGraceTimerRef.current = null;
+    }
+    if (exitAnimationTimerRef.current) {
+      clearTimeout(exitAnimationTimerRef.current);
+      exitAnimationTimerRef.current = null;
+    }
+    setIsPopoverClosing(false);
+  }, []);
+
+  const closePopover = useCallback(() => {
+    clearCloseTimer();
+    activePreviewCourseIdRef.current = null;
+    setHoveredCourse(null);
+    setAnchorRect(null);
+    setIsPopoverClosing(false);
+  }, [clearCloseTimer]);
+
+  const closePopoverImmediately = useCallback(() => {
+    clearCloseTimer();
+    activePreviewCourseIdRef.current = null;
+    flushSync(() => {
+      setHoveredCourse(null);
+      setAnchorRect(null);
+      setIsPopoverClosing(false);
+    });
+  }, [clearCloseTimer]);
+
+  const scheduleClosePopover = useCallback(() => {
+    clearCloseTimer();
+    closeGraceTimerRef.current = setTimeout(() => {
+      closeGraceTimerRef.current = null;
+      setIsPopoverClosing(true);
+      exitAnimationTimerRef.current = setTimeout(() => {
+        setHoveredCourse(null);
+        setAnchorRect(null);
+        setIsPopoverClosing(false);
+        activePreviewCourseIdRef.current = null;
+        exitAnimationTimerRef.current = null;
+      }, POPOVER_EXIT_ANIMATION_MS);
+    }, HOVER_CLOSE_GRACE_MS);
+  }, [clearCloseTimer]);
+
+  const showCoursePreview = useCallback((course, cardElement) => {
+    activePreviewCourseIdRef.current = course._id;
+    setHoveredCourse(course);
+    setAnchorRect(cardElement.getBoundingClientRect());
+  }, []);
+
+  const handleCardMouseEnter = useCallback(
+    (course, cardElement) => {
+      clearCloseTimer();
+      if (activePreviewCourseIdRef.current === course._id && hoveredCourse?._id === course._id) {
+        return;
+      }
+      showCoursePreview(course, cardElement);
+    },
+    [clearCloseTimer, hoveredCourse?._id, showCoursePreview]
+  );
+
+  const handleCardMouseMove = useCallback(
+    (course, cardElement) => {
+      const isSamePreview =
+        activePreviewCourseIdRef.current === course._id && hoveredCourse?._id === course._id;
+
+      if (isSamePreview && !isPopoverClosing) return;
+
+      clearCloseTimer();
+      showCoursePreview(course, cardElement);
+    },
+    [clearCloseTimer, hoveredCourse?._id, isPopoverClosing, showCoursePreview]
+  );
+
+  const handleCardPointerDown = useCallback(
+    (course, cardElement) => {
+      const isSamePreview =
+        activePreviewCourseIdRef.current === course._id && hoveredCourse?._id === course._id;
+
+      if (isSamePreview && !isPopoverClosing) return;
+
+      clearCloseTimer();
+      showCoursePreview(course, cardElement);
+    },
+    [clearCloseTimer, hoveredCourse?._id, isPopoverClosing, showCoursePreview]
+  );
+
+  const updateScrollButtons = useCallback(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
     const { scrollLeft, scrollWidth, clientWidth } = container;
@@ -24,20 +123,12 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
 
     setShowLeftArrow(!isAtStart);
     setShowRightArrow(!isAtEnd);
+  }, []);
 
-    const threshold = 100;
-    setNearRightEdge(
-      cardsRef.current.map((card) => {
-        if (!card) return false;
-        const cardRect = card.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        return (
-          cardRect.left < containerRect.right &&
-          containerRect.right - cardRect.right < threshold
-        );
-      })
-    );
-  }, [setNearRightEdge]);
+  const handleCourseGridScroll = useCallback(() => {
+    updateScrollButtons();
+    closePopover();
+  }, [closePopover, updateScrollButtons]);
 
   const scroll = useCallback(
     (direction) => {
@@ -48,9 +139,9 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
         left: direction === 'right' ? scrollDistance : -scrollDistance,
         behavior: 'smooth',
       });
-      setTimeout(checkScrollState, 500); // 滾動完成後檢查狀態
+      setTimeout(updateScrollButtons, 500); // 滾動完成後檢查狀態
     },
-    [checkScrollState]
+    [updateScrollButtons]
   );
 
   useEffect(() => {
@@ -68,7 +159,7 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
         const response = await CourseService.getAllCourses();
         const shuffledCourses = shuffleArray(response.data);
         setCourses(shuffledCourses);
-        setTimeout(checkScrollState, 0);
+        setTimeout(updateScrollButtons, 0);
       } catch (error) {
         console.error('獲取課程資料失敗:', error);
         setError('獲取課程資料失敗');
@@ -78,17 +169,37 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
     };
 
     fetchCourses();
+  }, [updateScrollButtons]);
 
+  useEffect(() => {
     const container = containerRef.current;
-    if (container) {
-      container.addEventListener('scroll', checkScrollState);
-      window.addEventListener('resize', checkScrollState);
-      return () => {
-        container.removeEventListener('scroll', checkScrollState);
-        window.removeEventListener('resize', checkScrollState);
-      };
-    }
-  }, [checkScrollState]);
+    if (!container) return undefined;
+
+    container.addEventListener('scroll', handleCourseGridScroll);
+    return () => {
+      container.removeEventListener('scroll', handleCourseGridScroll);
+    };
+  }, [handleCourseGridScroll]);
+
+  useEffect(() => {
+    if (!isPopoverOpen) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') closePopover();
+    };
+
+    window.addEventListener('scroll', closePopover, { passive: true });
+    window.addEventListener('resize', closePopover);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('scroll', closePopover);
+      window.removeEventListener('resize', closePopover);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closePopover, isPopoverOpen]);
+
+  useEffect(() => clearCloseTimer, [clearCloseTimer]);
 
   // 添加觸摸滑動支持
   useEffect(() => {
@@ -139,7 +250,7 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
   if (courses.length === 0) return <div>目前沒有可用的課程</div>;
 
   return (
-    <div className="course-card-scroller">
+    <div className="course-card-scroller" onWheelCapture={closePopoverImmediately}>
       <ScrollButton
         direction="left"
         onClick={() => scroll('left')}
@@ -153,7 +264,10 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
             course={course}
             showAlert={showAlert}
             currentUser={currentUser}
-            isNearRightEdge={nearRightEdge[index]}
+            onCardMouseEnter={handleCardMouseEnter}
+            onCardMouseMove={handleCardMouseMove}
+            onCardPointerDown={handleCardPointerDown}
+            onCardMouseLeave={scheduleClosePopover}
           />
         ))}
       </div>
@@ -161,6 +275,16 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
         direction="right"
         onClick={() => scroll('right')}
         isVisible={showRightArrow}
+      />
+      <CourseHoverPopover
+        course={hoveredCourse}
+        anchorRect={anchorRect}
+        showAlert={showAlert}
+        currentUser={currentUser}
+        isClosing={isPopoverClosing}
+        onMouseEnter={clearCloseTimer}
+        onMouseLeave={scheduleClosePopover}
+        onWheel={closePopoverImmediately}
       />
     </div>
   );
