@@ -48,6 +48,22 @@
   transform: translateY(4px) scale(0.985);
 }
 
+.course-hover-popover::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+}
+
+.course-hover-popover.align-right::after {
+  left: -16px;
+}
+
+.course-hover-popover.align-left::after {
+  right: -16px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .course-hover-popover {
     transition: none;

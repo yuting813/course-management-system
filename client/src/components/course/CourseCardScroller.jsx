@@ -6,6 +6,9 @@ import CourseHoverPopover from './CourseHoverPopover';
 import ScrollButton from './ScrollButton';
 import CourseSkeleton from './CourseSkeleton';
 
+const HOVER_CLOSE_GRACE_MS = 140;
+const POPOVER_EXIT_ANIMATION_MS = 120;
+
 const CourseCardScroller = ({ showAlert, currentUser }) => {
   const [courses, setCourses] = useState([]);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
@@ -18,13 +21,18 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
 
   const containerRef = useRef(null);
   const cardsRef = useRef([]);
-  const closeTimerRef = useRef(null);
+  const closeGraceTimerRef = useRef(null);
+  const exitAnimationTimerRef = useRef(null);
   const isPopoverOpen = Boolean(hoveredCourse && anchorRect);
 
   const clearCloseTimer = useCallback(() => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
+    if (closeGraceTimerRef.current) {
+      clearTimeout(closeGraceTimerRef.current);
+      closeGraceTimerRef.current = null;
+    }
+    if (exitAnimationTimerRef.current) {
+      clearTimeout(exitAnimationTimerRef.current);
+      exitAnimationTimerRef.current = null;
     }
     setIsPopoverClosing(false);
   }, []);
@@ -47,12 +55,16 @@ const CourseCardScroller = ({ showAlert, currentUser }) => {
 
   const scheduleClosePopover = useCallback(() => {
     clearCloseTimer();
-    setIsPopoverClosing(true);
-    closeTimerRef.current = setTimeout(() => {
-      setHoveredCourse(null);
-      setAnchorRect(null);
-      setIsPopoverClosing(false);
-    }, 120);
+    closeGraceTimerRef.current = setTimeout(() => {
+      closeGraceTimerRef.current = null;
+      setIsPopoverClosing(true);
+      exitAnimationTimerRef.current = setTimeout(() => {
+        setHoveredCourse(null);
+        setAnchorRect(null);
+        setIsPopoverClosing(false);
+        exitAnimationTimerRef.current = null;
+      }, POPOVER_EXIT_ANIMATION_MS);
+    }, HOVER_CLOSE_GRACE_MS);
   }, [clearCloseTimer]);
 
   const handleCardMouseEnter = useCallback(
