@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import CourseDetails from './CourseDetails';
 
 const POPOVER_WIDTH = 320;
-const POPOVER_MAX_HEIGHT = 544;
 const GAP = 16;
 const EDGE_PADDING = 16;
 
@@ -28,15 +27,7 @@ const CourseHoverPopover = ({
       ? anchorRect.right + GAP
       : anchorRect.left - POPOVER_WIDTH - GAP;
 
-    const visibleHeight = Math.min(
-      POPOVER_MAX_HEIGHT,
-      window.innerHeight - EDGE_PADDING * 2
-    );
-    const top = clamp(
-      anchorRect.top,
-      EDGE_PADDING,
-      window.innerHeight - visibleHeight - EDGE_PADDING
-    );
+    const top = Math.max(anchorRect.top, EDGE_PADDING);
 
     return {
       alignRight,
